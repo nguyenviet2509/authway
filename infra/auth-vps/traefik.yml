@@ -7,10 +7,9 @@ global:
 
 log:
   level: INFO
-  filePath: /var/log/traefik/traefik.log
+  # stdout — dễ debug qua docker compose logs
 
 accessLog:
-  filePath: /var/log/traefik/access.log
   bufferingSize: 100
   fields:
     headers:
