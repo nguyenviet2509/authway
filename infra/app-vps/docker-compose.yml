@@ -60,30 +60,22 @@ services:
     extra_hosts:
       # Lab: container không thấy /etc/hosts host. Map ZITADEL_HOSTNAME → IP của auth VPS.
       - "${ZITADEL_HOSTNAME}:${ZITADEL_IP}"
+    # oauth2-proxy giữ vai trò sole proxy: tự handle auth + upstream
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=authway-app_edge"
-      - "traefik.http.routers.nextjs-auth.rule=Host(`${NEXTJS_HOSTNAME}`) && PathPrefix(`/oauth2`)"
-      - "traefik.http.routers.nextjs-auth.entrypoints=websecure"
-      - "traefik.http.routers.nextjs-auth.tls=true"
-      - "traefik.http.routers.nextjs-auth.priority=10"
-      - "traefik.http.services.oauth2-proxy-nextjs.loadbalancer.server.port=4180"
+      - "traefik.http.routers.nextjs.rule=Host(`${NEXTJS_HOSTNAME}`)"
+      - "traefik.http.routers.nextjs.entrypoints=websecure"
+      - "traefik.http.routers.nextjs.tls=true"
+      - "traefik.http.services.nextjs.loadbalancer.server.port=4180"
 
-  # ── Next.js sample app ─────────────────────────────────
+  # ── Next.js sample app (internal only, qua oauth2-proxy) ───
   nextjs-demo:
     build:
       context: ../../sample-apps/nextjs-iap-demo
     restart: unless-stopped
     networks: [internal]
-    # No host port — internal docker network only (red-team #3)
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=authway-app_edge"
-      - "traefik.http.routers.nextjs-app.rule=Host(`${NEXTJS_HOSTNAME}`)"
-      - "traefik.http.routers.nextjs-app.entrypoints=websecure"
-      - "traefik.http.routers.nextjs-app.tls=true"
-      - "traefik.http.routers.nextjs-app.middlewares=nextjs-forwardauth@file,nextjs-auth-redirect@file"
-      - "traefik.http.services.nextjs-app.loadbalancer.server.port=3000"
+    # KHÔNG có traefik labels — chỉ reachable từ oauth2-proxy-nextjs qua internal network
 
   # ── oauth2-proxy cho static-demo ──────────────────────
   oauth2-proxy-static:
@@ -114,13 +106,12 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=authway-app_edge"
-      - "traefik.http.routers.static-auth.rule=Host(`${STATIC_HOSTNAME}`) && PathPrefix(`/oauth2`)"
-      - "traefik.http.routers.static-auth.entrypoints=websecure"
-      - "traefik.http.routers.static-auth.tls=true"
-      - "traefik.http.routers.static-auth.priority=10"
-      - "traefik.http.services.oauth2-proxy-static.loadbalancer.server.port=4180"
+      - "traefik.http.routers.static.rule=Host(`${STATIC_HOSTNAME}`)"
+      - "traefik.http.routers.static.entrypoints=websecure"
+      - "traefik.http.routers.static.tls=true"
+      - "traefik.http.services.static.loadbalancer.server.port=4180"
 
-  # ── Static HTML sample app ─────────────────────────────
+  # ── Static HTML sample (internal only) ─────────────────
   static-demo:
     image: nginx:1.27-alpine
     restart: unless-stopped
@@ -128,11 +119,4 @@ services:
     volumes:
       - ../../sample-apps/static-iap-demo/html:/usr/share/nginx/html:ro
       - ../../sample-apps/static-iap-demo/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=authway-app_edge"
-      - "traefik.http.routers.static-app.rule=Host(`${STATIC_HOSTNAME}`)"
-      - "traefik.http.routers.static-app.entrypoints=websecure"
-      - "traefik.http.routers.static-app.tls=true"
-      - "traefik.http.routers.static-app.middlewares=static-forwardauth@file,static-auth-redirect@file"
-      - "traefik.http.services.static-app.loadbalancer.server.port=80"
+    # KHÔNG có traefik labels — chỉ reachable từ oauth2-proxy-static
