@@ -29,7 +29,7 @@ services:
     # NOTE: Zitadel `init` command auto-creates zitadel db + user via admin creds.
     # Không cần init SQL ngoài.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_ADMIN_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -51,7 +51,7 @@ services:
       ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
     volumes:
-      - ./zitadel-config.yaml:/zitadel-config.yaml:ro
+      - ./zitadel-config.runtime.yaml:/zitadel-config.yaml:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,7 +88,7 @@ services:
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD}
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "true"
     volumes:
-      - ./zitadel-config.yaml:/zitadel-config.yaml:ro
+      - ./zitadel-config.runtime.yaml:/zitadel-config.yaml:ro
       - ./zitadel-steps.yaml:/zitadel-steps.yaml:ro
     depends_on:
       zitadel-init:
@@ -120,7 +120,7 @@ services:
       ZITADEL_EXTERNALPORT: 443
       ZITADEL_EXTERNALSECURE: "true"
     volumes:
-      - ./zitadel-config.yaml:/zitadel-config.yaml:ro
+      - ./zitadel-config.runtime.yaml:/zitadel-config.yaml:ro
       - zitadel-data:/data
     depends_on:
       zitadel-setup:

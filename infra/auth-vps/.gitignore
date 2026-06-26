@@ -3,3 +3,4 @@ tls/
 *.crt
 *.key
 *.pem
+zitadel-config.runtime.yaml

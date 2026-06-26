@@ -4,6 +4,25 @@
 Log:
   Level: info
 
+# Database — config trực tiếp qua YAML thay vì env (env var injection v2.66 có issue)
+# Substitute giá trị qua envsubst trong start script
+Database:
+  Postgres:
+    Host: postgres
+    Port: 5432
+    Database: zitadel
+    MaxOpenConns: 10
+    User:
+      Username: ${ZITADEL_DB_USER}
+      Password: ${ZITADEL_DB_PASSWORD}
+      SSL:
+        Mode: disable
+    Admin:
+      Username: ${POSTGRES_ADMIN_USER}
+      Password: ${POSTGRES_ADMIN_PASSWORD}
+      SSL:
+        Mode: disable
+
 LogStore:
   Access:
     Database:
@@ -12,10 +31,8 @@ LogStore:
         MinFrequency: 1s
         MaxBulkSize: 100
 
-# Default Instance settings — bootstrapped once at setup
 DefaultInstance:
   LoginPolicy:
-    # Red-team #9: disable self-service password/MFA reset via email — admin-mediated only
     AllowUsernamePassword: true
     AllowRegister: false
     AllowExternalIDP: false
@@ -25,15 +42,13 @@ DefaultInstance:
     AllowDomainDiscovery: false
     DisableLoginWithEmail: false
     DisableLoginWithPhone: true
-    # MFA factors: TOTP + Passkey (U2F)
     SecondFactors:
-      - 1  # OTP
-      - 2  # U2F (Passkey)
+      - 1
+      - 2
     MultiFactors:
-      - 1  # U2F with PIN (Passkey)
+      - 1
     PasswordlessType: 1
 
-  # Red-team #14: lockout to slow credential stuffing
   LockoutPolicy:
     MaxPasswordAttempts: 5
     ShowLockoutFailures: false
@@ -44,10 +59,3 @@ DefaultInstance:
     HasUppercase: true
     HasNumber: true
     HasSymbol: true
-
-  PrivacyPolicy:
-    TOSLink: ""
-    PrivacyLink: ""
-
-# SMTP — Lab: mailhog. Production: thay qua admin UI.
-# Note: Zitadel SMTP cấu hình thực tế qua admin UI hoặc API sau setup.
