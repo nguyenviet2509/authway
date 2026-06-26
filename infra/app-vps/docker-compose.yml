@@ -109,6 +109,8 @@ services:
       - --skip-provider-button=true
       - --upstream=http://static-demo:80
       - --ssl-insecure-skip-verify=true
+    extra_hosts:
+      - "${ZITADEL_HOSTNAME}:${ZITADEL_IP}"
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=authway-app_edge"
