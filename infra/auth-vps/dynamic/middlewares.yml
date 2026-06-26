@@ -1,0 +1,50 @@
+# Dynamic middlewares — auth VPS
+# Red-team #14: rate-limit auth paths to slow credential stuffing
+# Red-team #2: security headers at entrypoint-level (declared in traefik.yml)
+
+http:
+  middlewares:
+    # Rate-limit Zitadel login/authorize paths (red-team #14)
+    ratelimit-auth:
+      rateLimit:
+        average: 30
+        period: 1m
+        burst: 60
+        sourceCriterion:
+          ipStrategy:
+            depth: 0
+
+    # Security headers (HSTS, X-Frame-Options, no-sniff, referrer policy)
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: false
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: strict-origin-when-cross-origin
+        # Strip any incoming X-Auth-* on auth VPS (defense in depth — Zitadel doesn't read these)
+        customRequestHeaders:
+          X-Auth-Request-Email: ""
+          X-Auth-Request-User: ""
+          X-Auth-Request-Preferred-Username: ""
+          X-Auth-Request-Groups: ""
+          X-Forwarded-User: ""
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+
+  # Lab: self-signed cert. Generate via scripts/generate-lab-cert.sh
+  certificates:
+    - certFile: /etc/traefik/tls/auth.crt
+      keyFile: /etc/traefik/tls/auth.key

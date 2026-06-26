@@ -1,0 +1,169 @@
+name: authway-auth
+
+networks:
+  # Internal: app containers only talk via this network. NEVER expose to host 0.0.0.0.
+  # Red-team #3: enforce internal-only binding for Postgres + Zitadel; Traefik is sole ingress.
+  internal:
+    driver: bridge
+  edge:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  zitadel-data:
+  traefik-acme:
+  traefik-logs:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks: [internal]
+    # NO ports: published — internal docker network only (red-team #3)
+    environment:
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    # NOTE: Zitadel `init` command auto-creates zitadel db + user via admin creds.
+    # Không cần init SQL ngoài.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_ADMIN_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zitadel-init:
+    # Idempotent init: creates schema + admin
+    image: ghcr.io/zitadel/zitadel:v2.66.0
+    restart: "no"
+    networks: [internal]
+    command: ["init", "--config", "/zitadel-config.yaml"]
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${ZITADEL_DB_USER}
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${ZITADEL_DB_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_ADMIN_USER}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+    volumes:
+      - ./zitadel-config.yaml:/zitadel-config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  zitadel-setup:
+    # Bootstrap default org + admin user. Runs after init.
+    image: ghcr.io/zitadel/zitadel:v2.66.0
+    restart: "no"
+    networks: [internal]
+    command:
+      - setup
+      - --masterkey
+      - ${ZITADEL_MASTERKEY}
+      - --tlsMode
+      - external
+      - --config
+      - /zitadel-config.yaml
+      - --steps
+      - /zitadel-steps.yaml
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${ZITADEL_DB_USER}
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${ZITADEL_DB_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_ADMIN_USER}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_EXTERNALDOMAIN: ${ZITADEL_EXTERNAL_DOMAIN}
+      ZITADEL_EXTERNALPORT: 443
+      ZITADEL_EXTERNALSECURE: "true"
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${ZITADEL_ADMIN_USERNAME}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "true"
+    volumes:
+      - ./zitadel-config.yaml:/zitadel-config.yaml:ro
+      - ./zitadel-steps.yaml:/zitadel-steps.yaml:ro
+    depends_on:
+      zitadel-init:
+        condition: service_completed_successfully
+
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v2.66.0
+    restart: unless-stopped
+    networks: [internal, edge]
+    command:
+      - start
+      - --masterkey
+      - ${ZITADEL_MASTERKEY}
+      - --tlsMode
+      - external
+      - --config
+      - /zitadel-config.yaml
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${ZITADEL_DB_USER}
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${ZITADEL_DB_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_ADMIN_USER}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_EXTERNALDOMAIN: ${ZITADEL_EXTERNAL_DOMAIN}
+      ZITADEL_EXTERNALPORT: 443
+      ZITADEL_EXTERNALSECURE: "true"
+    volumes:
+      - ./zitadel-config.yaml:/zitadel-config.yaml:ro
+      - zitadel-data:/data
+    depends_on:
+      zitadel-setup:
+        condition: service_completed_successfully
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: authway-auth_edge
+      traefik.http.routers.zitadel.rule: Host(`${ZITADEL_EXTERNAL_DOMAIN}`)
+      traefik.http.routers.zitadel.entrypoints: websecure
+      traefik.http.routers.zitadel.tls: "true"
+      # Rate-limit auth paths (red-team #14)
+      traefik.http.routers.zitadel.middlewares: ratelimit-auth@file,security-headers@file
+      traefik.http.services.zitadel.loadbalancer.server.port: "8080"
+      traefik.http.services.zitadel.loadbalancer.server.scheme: h2c
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready", "--config", "/zitadel-config.yaml"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  traefik:
+    image: traefik:v3.2
+    restart: unless-stopped
+    networks: [edge]
+    ports:
+      - "80:80"
+      - "443:443"
+      # Dashboard only reachable via local SSH tunnel — do NOT expose
+      - "127.0.0.1:8088:8080"
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./dynamic:/etc/traefik/dynamic:ro
+      - ./tls:/etc/traefik/tls:ro
+      - traefik-acme:/acme
+      - traefik-logs:/var/log/traefik
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # Mailhog for lab/dev. In production replace with real SMTP relay creds in Zitadel config.
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    networks: [internal]
+    # SMTP 1025 reached by Zitadel via service name 'mailhog:1025'
+    # Web UI not exposed publicly — SSH tunnel to view
+    ports:
+      - "127.0.0.1:8025:8025"

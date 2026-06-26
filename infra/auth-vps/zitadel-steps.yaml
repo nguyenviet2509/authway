@@ -1,0 +1,18 @@
+# Zitadel setup steps — applied once during initial setup
+# https://zitadel.com/docs/self-hosting/manage/configure#example-steps-configuration
+
+FirstInstance:
+  InstanceName: authway
+  DefaultLanguage: en
+  Org:
+    Name: Authway Internal
+    Human:
+      UserName: ${ZITADEL_ADMIN_USERNAME}
+      FirstName: Auth
+      LastName: Admin
+      Email:
+        Address: admin@lab.local
+        Verified: true
+      PreferredLanguage: en
+      Password: ${ZITADEL_ADMIN_PASSWORD}
+      PasswordChangeRequired: true

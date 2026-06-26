@@ -1,0 +1,61 @@
+# Traefik static config — auth VPS
+# Dynamic config (middlewares, routers per service) trong ./dynamic/ + Docker labels
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+  filePath: /var/log/traefik/traefik.log
+
+accessLog:
+  filePath: /var/log/traefik/access.log
+  bufferingSize: 100
+  fields:
+    headers:
+      defaultMode: keep
+      names:
+        Authorization: drop
+        Cookie: drop
+
+api:
+  dashboard: true
+  insecure: true  # chỉ bind 127.0.0.1:8088 trong compose — KHÔNG expose
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":443"
+    http:
+      tls: {}
+      # Entrypoint-level middleware: applies to MỌI router (red-team #2)
+      # security-headers áp dụng cho mọi response (HSTS, X-Frame-Options...)
+      middlewares:
+        - security-headers@file
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: authway-auth_edge
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+# Lab: self-signed cert (xem tls-config.yml). Production: chuyển sang ACME bên dưới.
+# certificatesResolvers:
+#   letsencrypt:
+#     acme:
+#       email: admin@company.com
+#       storage: /acme/acme.json
+#       dnsChallenge:
+#         provider: cloudflare  # or your DNS provider

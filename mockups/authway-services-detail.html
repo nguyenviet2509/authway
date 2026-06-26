@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<title>Authway · Chi tiết từng service</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root{
+    --bg:#0a0a0b;--card:#111114;--card2:#0e0e12;--line:#1f1f25;
+    --mut:#8a8a96;--fg:#ededf0;--acc:#7dd3fc;--ok:#34d399;--warn:#fbbf24;--err:#f87171;--vio:#c4b5fd;--lime:#86efac;
+  }
+  html,body{background:var(--bg);color:var(--fg);font-family:'Geist',Inter,ui-sans-serif,system-ui;font-feature-settings:"ss01","cv11"}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px}
+  .card2{background:var(--card2);border:1px solid var(--line);border-radius:10px}
+  .mut{color:var(--mut)}.acc{color:var(--acc)}.ok{color:var(--ok)}.warn{color:var(--warn)}.err{color:var(--err)}.vio{color:var(--vio)}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;font-size:11px;color:var(--mut);background:#0d0d11}
+  .chip.on{color:var(--fg);background:#15151a}
+  .dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+  .h-title{font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:var(--mut)}
+  kbd{background:#1f1f25;border:1px solid #2a2a30;border-radius:4px;padding:1px 5px;font-size:10px;font-family:ui-monospace}
+  pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{margin:0;font-size:12px;line-height:1.55}
+  .pill{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:.04em}
+  .pill.cyan{background:#082f3f;color:#7dd3fc}
+  .pill.lime{background:#0c2a12;color:#86efac}
+  .pill.amber{background:#2a1f06;color:#fbbf24}
+  .pill.vio{background:#1f1a3a;color:#c4b5fd}
+  .pill.gray{background:#15151a;color:#cdd2d8}
+  .pill.red{background:#2a0a0a;color:#fda4af}
+  table.k{width:100%;font-size:12.5px;border-collapse:collapse}
+  table.k th,table.k td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  table.k th{color:var(--mut);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.12em}
+  table.k td code{font-size:11.5px}
+  .svc-header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .anchor{scroll-margin-top:16px}
+  .badge{font-size:10px;padding:1px 6px;border-radius:4px;border:1px solid var(--line);color:var(--mut);background:#0d0d11}
+  hr.sep{border:0;border-top:1px dashed #1f1f25;margin:14px 0}
+  .num{width:18px;height:18px;border-radius:5px;background:#15151a;border:1px solid var(--line);display:inline-grid;place-items:center;font-size:10px;color:var(--acc);font-weight:600;margin-right:6px}
+  .role{background:linear-gradient(180deg,#0d1218,#0e0e12);border:1px solid #15263a;border-radius:10px;padding:12px 14px;margin-top:14px}
+  .role h4{font-size:11px;text-transform:uppercase;letter-spacing:.16em;color:var(--acc);margin:0 0 6px}
+  .role .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:8px}
+  @media (max-width:1024px){.role .grid4{grid-template-columns:repeat(2,1fr)}}
+  .role .b{background:#0a0e14;border:1px solid #14202e;border-radius:8px;padding:9px 10px}
+  .role .b .t{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#5fa8d3}
+  .role .b .x{font-size:12.5px;margin-top:4px;color:#cdd2d8;line-height:1.5}
+  .role ul{margin:0;padding-left:18px;font-size:13px;line-height:1.7;color:#cdd2d8}
+  .role ul li::marker{color:var(--acc)}
+  .files{background:linear-gradient(180deg,#0e1308,#0e0e12);border:1px solid #1d2a14;border-radius:10px;padding:12px 14px;margin-top:12px}
+  .files h4{font-size:11px;text-transform:uppercase;letter-spacing:.16em;color:var(--lime);margin:0 0 8px}
+  .files table{width:100%;font-size:12.5px;border-collapse:collapse}
+  .files td{padding:6px 8px;border-bottom:1px dashed #1c2a14;vertical-align:top}
+  .files td:first-child{width:38%;color:#cdd2d8}
+  .files td code{font-size:11.5px;color:#d6f5b0}
+  .files td:last-child{color:#a8b5b8;line-height:1.5}
+  .svc-nav{position:fixed;top:16px;right:16px;width:44px;max-height:calc(100vh - 32px);overflow:hidden;z-index:50;padding:6px;transition:width .2s ease}
+  .svc-nav:hover{width:240px;overflow-y:auto}
+  .svc-nav::-webkit-scrollbar{width:6px}
+  .svc-nav::-webkit-scrollbar-thumb{background:#2a2a32;border-radius:3px}
+  .svc-nav .h-title{opacity:0;transition:opacity .15s ease;white-space:nowrap}
+  .svc-nav:hover .h-title{opacity:1}
+  .svc-nav a{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;color:var(--mut);white-space:nowrap;overflow:hidden}
+  .svc-nav a:hover{background:#15151a;color:var(--fg)}
+  .svc-nav a .ico{flex:0 0 auto;width:24px;text-align:center;font-size:14px;color:var(--acc)}
+  .svc-nav a .lbl{flex:1;opacity:0;transition:opacity .15s ease}
+  .svc-nav:hover a .lbl{opacity:1}
+  @media (max-width:1280px){.svc-nav{display:none}}
+</style>
+</head>
+<body>
+<div class="max-w-[1320px] mx-auto p-6">
+
+  <!-- HEADER -->
+  <header class="flex items-center justify-between pb-5 border-b border-[#1f1f25]">
+    <div class="flex items-center gap-3">
+      <div class="size-9 rounded-xl bg-white text-black grid place-items-center font-black">A</div>
+      <div>
+        <div class="font-semibold">Authway <span class="mut font-normal">/ services detail</span></div>
+        <div class="text-[11px] mut">Mỗi container · image · port · volume · env · vai trò</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 text-xs">
+      <span class="chip on">infra/auth-server + infra/app-vps-template</span>
+      <span class="chip"><span class="dot" style="background:var(--ok)"></span> 2026-06-26</span>
+    </div>
+  </header>
+
+  <!-- FLOATING SERVICE NAV -->
+  <nav class="svc-nav card">
+    <div class="h-title px-2 mb-1">Services</div>
+    <a href="#traefik-auth"><span class="ico">①</span><span class="lbl">traefik (auth-server)</span></a>
+    <a href="#zitadel"><span class="ico">②</span><span class="lbl">zitadel</span></a>
+    <a href="#postgres"><span class="ico">③</span><span class="lbl">postgres</span></a>
+    <a href="#traefik-app"><span class="ico">④</span><span class="lbl">traefik (app-vps)</span></a>
+    <a href="#oauth2-proxy"><span class="ico">⑤</span><span class="lbl">oauth2-proxy</span></a>
+    <a href="#app-downstream"><span class="ico">⑥</span><span class="lbl">app downstream</span></a>
+    <a href="#backup"><span class="ico">⑦</span><span class="lbl">backup cron</span></a>
+    <a href="#systemd"><span class="ico">⑧</span><span class="lbl">systemd unit</span></a>
+    <a href="#future"><span class="ico">—</span><span class="lbl">future / deferred</span></a>
+  </nav>
+
+  <!-- INTRO -->
+  <section class="mt-5">
+    <div class="card p-5">
+      <div class="h-title">Stack overview</div>
+      <p class="mut mt-2 text-sm leading-relaxed">
+        Authway tách thành 2 stack docker-compose độc lập:
+        <b>auth-server stack</b> (Traefik + Zitadel + Postgres) chạy 1 VPS duy nhất tại <code>192.168.122.54</code>,
+        và <b>app-vps stack template</b> (Traefik + oauth2-proxy + app) clone deploy trên mỗi VPS app khác.
+        Tất cả service tuân middleware chain <b>strip-auth-in → iap-auth → app</b> để chống header spoofing.
+      </p>
+      <div class="flex flex-wrap gap-2 mt-4 text-xs">
+        <span class="chip on">Auth-server: 3 service</span>
+        <span class="chip on">App-vps template: 3+ service</span>
+        <span class="chip on">Network: bridge per stack</span>
+        <span class="chip on">TLS: tls internal (lab)</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SERVICES -->
+
+  <!-- 1. TRAEFIK AUTH -->
+  <section id="traefik-auth" class="anchor mt-8">
+    <div class="card p-5">
+      <div class="svc-header">
+        <div>
+          <h3 class="text-lg font-semibold"><span class="num">①</span>traefik <span class="pill cyan ml-1">edge · auth-server</span></h3>
+          <p class="mut text-[12px] mt-1">Edge proxy cho auth.authway.lab — TLS termination, IP whitelist middleware, routing tới Zitadel</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="badge">image: traefik:v3.2</span>
+          <span class="badge">ports: 80, 443</span>
+        </div>
+      </div>
+
+      <div class="role">
+        <h4>Vai trò</h4>
+        <div class="grid4">
+          <div class="b"><div class="t">TLS</div><div class="x">Cert resolver <code>internal</code> (self-signed lab) / Let's Encrypt prod</div></div>
+          <div class="b"><div class="t">Routing</div><div class="x">Host <code>auth.authway.lab</code> → service Zitadel :8080</div></div>
+          <div class="b"><div class="t">Middleware</div><div class="x"><code>ipwhitelist</code> subnet 192.168.122.0/24 + security-headers</div></div>
+          <div class="b"><div class="t">Discovery</div><div class="x">Docker provider — pick up label trên service zitadel</div></div>
+        </div>
+        <ul class="mt-3">
+          <li>HTTP 80 → redirect 301 sang HTTPS 443</li>
+          <li>Backend Zitadel dùng scheme <code>h2c</code> (HTTP/2 cleartext) — Zitadel server-side support h2 native</li>
+          <li>ACME storage volume <code>./data/letsencrypt:/letsencrypt</code> — giữ cert qua restart</li>
+        </ul>
+      </div>
+
+      <div class="files">
+        <h4>Files</h4>
+        <table>
+          <tr><td>Compose</td><td><code>infra/auth-server/docker-compose.yml</code></td><td>Service <code>traefik</code> với command flags, labels chỉ trên service khác</td></tr>
+          <tr><td>Dynamic config</td><td><code>infra/auth-server/traefik/dynamic/middlewares.yml</code></td><td>Định nghĩa middleware <code>ipwhitelist</code>, <code>security-headers</code></td></tr>
+          <tr><td>Volume mount</td><td><code>/var/run/docker.sock:/var/run/docker.sock:ro</code></td><td>Read-only docker socket — auto-discover service mới</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. ZITADEL -->
+  <section id="zitadel" class="anchor mt-8">
+    <div class="card p-5">
+      <div class="svc-header">
+        <div>
+          <h3 class="text-lg font-semibold"><span class="num">②</span>zitadel <span class="pill vio ml-1">OIDC issuer · MFA · audit</span></h3>
+          <p class="mut text-[12px] mt-1">Core identity provider — local users, login policy MFA enforced, OIDC + OAuth2.1 endpoints, event-sourced audit</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="badge">image: ghcr.io/zitadel/zitadel:v2.66</span>
+          <span class="badge">internal port: 8080</span>
+        </div>
+      </div>
+
+      <div class="role">
+        <h4>Vai trò</h4>
+        <div class="grid4">
+          <div class="b"><div class="t">User store</div><div class="x">Local users (admin tạo); password + Passkey + TOTP</div></div>
+          <div class="b"><div class="t">OIDC</div><div class="x">Discovery <code>/.well-known/openid-configuration</code></div></div>
+          <div class="b"><div class="t">MFA Policy</div><div class="x">Force MFA = ON, Passkey + TOTP allowed</div></div>
+          <div class="b"><div class="t">Audit</div><div class="x">Event-sourced trong Postgres, expose Console UI</div></div>
+        </div>
+        <ul class="mt-3">
+          <li>Command: <code>start-from-init --masterkey ... --tlsMode disabled</code> — TLS terminate ở Traefik</li>
+          <li>Init container tự tạo schema + admin user lần đầu (ZITADEL_FIRSTINSTANCE_*)</li>
+          <li>Masterkey BẮT BUỘC random 32 bytes — lưu Bitwarden, không commit</li>
+          <li>External secure = true để Zitadel sinh URL <code>https://</code> đúng (mặc dù internal HTTP)</li>
+        </ul>
+      </div>
+
+      <div class="files">
+        <h4>Files · env</h4>
+        <table>
+          <tr><td>Compose</td><td><code>infra/auth-server/docker-compose.yml</code></td><td>Service <code>zitadel</code> + labels Traefik router</td></tr>
+          <tr><td>Env</td><td><code>infra/auth-server/.env</code></td><td>ZITADEL_MASTERKEY, EXTERNAL*, POSTGRES_*, FIRSTINSTANCE_*</td></tr>
+          <tr><td>Postgres connection</td><td>env block trong compose</td><td>DATABASE_POSTGRES_HOST=postgres, USER + ADMIN credentials</td></tr>
+          <tr><td>Traefik label</td><td>compose label</td><td><code>traefik.http.services.zitadel.loadbalancer.server.scheme=h2c</code> (h2 cleartext)</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. POSTGRES -->
+  <section id="postgres" class="anchor mt-8">
+    <div class="card p-5">
+      <div class="svc-header">
+        <div>
+          <h3 class="text-lg font-semibold"><span class="num">③</span>postgres <span class="pill gray ml-1">persistence · audit · sessions</span></h3>
+          <p class="mut text-[12px] mt-1">Persistence cho Zitadel: users, projects, applications, grants, sessions, audit events</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="badge">image: postgres:16-alpine</span>
+          <span class="badge">port: 5432 (local only)</span>
+        </div>
+      </div>
+
+      <div class="role">
+        <h4>Vai trò</h4>
+        <div class="grid4">
+          <div class="b"><div class="t">Schema</div><div class="x">Zitadel tự tạo qua init step — không tự sửa</div></div>
+          <div class="b"><div class="t">Event store</div><div class="x">Audit immutable, append-only — không update/delete</div></div>
+          <div class="b"><div class="t">Healthcheck</div><div class="x"><code>pg_isready -U zitadel -d zitadel</code></div></div>
+          <div class="b"><div class="t">Volume</div><div class="x"><code>./data/postgres:/var/lib/postgresql/data</code></div></div>
+        </div>
+        <ul class="mt-3">
+          <li>Không expose ra ngoài VPS — chỉ Zitadel container truy cập qua docker network</li>
+          <li>Backup daily qua cron: <code>pg_dump --format=custom → /opt/authway/backup/</code></li>
+          <li>Retention 30 ngày local, restore test monthly vào staging</li>
+          <li>Production: thay bằng managed Postgres (Cloud SQL / RDS) cho HA + PITR</li>
+        </ul>
+      </div>
+
+      <div class="files">
+        <h4>Files</h4>
+        <table>
+          <tr><td>Compose service</td><td><code>infra/auth-server/docker-compose.yml</code></td><td>POSTGRES_USER/PASSWORD/DB từ env</td></tr>
+          <tr><td>Backup script</td><td><code>infra/auth-server/scripts/backup-postgres.sh</code></td><td>pg_dump + retention 30 ngày, chạy 02:00 daily via cron</td></tr>
+          <tr><td>Restore</td><td><code>pg_restore -U zitadel -d zitadel --clean --if-exists &lt; dump</code></td><td>Phải stop Zitadel trước, vì foreign key + event consistency</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. TRAEFIK APP -->
+  <section id="traefik-app" class="anchor mt-8">
+    <div class="card p-5">
+      <div class="svc-header">
+        <div>
+          <h3 class="text-lg font-semibold"><span class="num">④</span>traefik <span class="pill cyan ml-1">edge · app-vps</span></h3>
+          <p class="mut text-[12px] mt-1">Mỗi app-vps có 1 Traefik riêng. Khác auth-server: middleware chain <code>strip-auth-in → iap-auth → app</code></p>
+        </div>
+        <div class="flex gap-2">
+          <span class="badge">image: traefik:v3.2</span>
+          <span class="badge">ports: 80, 443</span>
+        </div>
+      </div>
+
+      <div class="role">
+        <h4>Middleware chain (CRITICAL — đúng thứ tự)</h4>
+        <div class="grid4">
+          <div class="b"><div class="t">1. strip-auth-in</div><div class="x">Xoá X-Auth-Request-* từ client request → chống spoof</div></div>
+          <div class="b"><div class="t">2. iap-auth</div><div class="x">forwardAuth tới oauth2-proxy → 401 redirect, 202 + headers</div></div>
+          <div class="b"><div class="t">3. (optional) ipwhitelist</div><div class="x">Defense in depth — subnet whitelist</div></div>
+          <div class="b"><div class="t">4. → app</div><div class="x">App nhận request kèm X-Auth-Request-Email từ iap-auth</div></div>
+        </div>
+        <ul class="mt-3">
+          <li><b>Sai thứ tự = security hole.</b> Nếu <code>iap-auth</code> chạy trước <code>strip-auth-in</code>, header spoof từ client sẽ truyền tới app.</li>
+          <li>Route <code>Host=${APP_HOSTNAME} &amp;&amp; PathPrefix=/oauth2/</code> dẫn về oauth2-proxy (không qua middleware chain) — login flow cần bypass</li>
+        </ul>
+      </div>
+
+      <div class="files">
+        <h4>Files</h4>
+        <table>
+          <tr><td>Compose</td><td><code>infra/app-vps-template/docker-compose.yml</code></td><td>Traefik + oauth2-proxy + app</td></tr>
+          <tr><td>Middleware</td><td><code>infra/app-vps-template/traefik/dynamic/middlewares.yml</code></td><td><code>strip-auth-in</code>, <code>iap-auth</code> (forwardAuth)</td></tr>
+          <tr><td>Label chain</td><td>compose label app</td><td><code>traefik.http.routers.app.middlewares=strip-auth-in@file,iap-auth@file</code></td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. OAUTH2-PROXY -->
+  <section id="oauth2-proxy" class="anchor mt-8">
+    <div class="card p-5">
+      <div class="svc-header">
+        <div>
+          <h3 class="text-lg font-semibold"><span class="num">⑤</span>oauth2-proxy <span class="pill lime ml-1">OIDC client · cookie · header inject</span></h3>
+          <p class="mut text-[12px] mt-1">Sidecar trên mỗi app-vps. Authenticate user qua Zitadel OIDC, set cookie SSO, inject X-Auth-* headers cho upstream</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="badge">image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1</span>
+          <span class="badge">internal port: 4180</span>
+        </div>
+      </div>
+
+      <div class="role">
+        <h4>Vai trò</h4>
+        <div class="grid4">
+          <div class="b"><div class="t">OIDC client</div><div class="x"><code>--provider=oidc</code> + issuer URL Zitadel</div></div>
+          <div class="b"><div class="t">Cookie</div><div class="x">cookie-domain <code>.authway.lab</code> → SSO subdomain</div></div>
+          <div class="b"><div class="t">Forward auth endpoint</div><div class="x"><code>/oauth2/auth</code> — Traefik gọi check session</div></div>
+          <div class="b"><div class="t">Header inject</div><div class="x"><code>--set-xauthrequest=true</code> → X-Auth-Request-Email + User + Preferred-Username</div></div>
+        </div>
+        <ul class="mt-3">
+          <li><code>--pass-access-token=false</code> — app KHÔNG nhận access_token (giảm XSS exfil risk)</li>
+          <li><code>--ssl-insecure-skip-verify=true</code> CHỈ cho lab (Zitadel tls internal). Production: gỡ.</li>
+          <li><code>--skip-provider-button=true</code> — không hiện màn hình chọn provider, redirect thẳng Zitadel</li>
+          <li><code>COOKIE_SECRET</code> phải là <code>openssl rand -base64 32</code> — generate riêng mỗi app</li>
+          <li>Route mount <code>Host && PathPrefix(/oauth2/)</code> để handle <code>/oauth2/start</code>, <code>/callback</code>, <code>/sign_out</code></li>
+        </ul>
+      </div>
+
+      <div class="files">
+        <h4>Files</h4>
+        <table>
+          <tr><td>Compose service</td><td><code>infra/app-vps-template/docker-compose.yml</code></td><td>Command flags trực tiếp trong compose</td></tr>
+          <tr><td>Env</td><td><code>.env</code></td><td>ZITADEL_CLIENT_ID, ZITADEL_CLIENT_SECRET, COOKIE_SECRET, APP_HOSTNAME</td></tr>
+          <tr><td>Traefik label</td><td>compose label</td><td>Route <code>Host(APP_HOSTNAME) && PathPrefix(/oauth2/)</code> bypass middleware chain</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. APP DOWNSTREAM -->
+  <section id="app-downstream" class="anchor mt-8">
+    <div class="card p-5">
+      <div class="svc-header">
+        <div>
+          <h3 class="text-lg font-semibold"><span class="num">⑥</span>app downstream <span class="pill gray ml-1">vibe-code · đọc header</span></h3>
+          <p class="mut text-[12px] mt-1">Bất kỳ app gì: Next.js / static HTML / Streamlit / Python. Code change ≤ 5 LOC để đọc <code>X-Auth-Request-Email</code></p>
+        </div>
+        <div class="flex gap-2">
+          <span class="badge">image: tùy app</span>
+          <span class="badge">port: tùy</span>
+        </div>
+      </div>
+
+      <div class="role">
+        <h4>Header contract</h4>
+        <div class="grid4">
+          <div class="b"><div class="t">X-Auth-Request-Email</div><div class="x">Email của user — chính</div></div>
+          <div class="b"><div class="t">X-Auth-Request-User</div><div class="x">Zitadel subject ID (UUID) — stable, dùng làm FK</div></div>
+          <div class="b"><div class="t">X-Auth-Request-Preferred-Username</div><div class="x">Username friendly</div></div>
+          <div class="b"><div class="t">(KHÔNG)</div><div class="x">Access token — đã <code>--pass-access-token=false</code></div></div>
+        </div>
+        <ul class="mt-3">
+          <li><b>Trust contract:</b> app TIN tưởng header này vì Traefik đã strip incoming + iap-auth chỉ set khi cookie valid</li>
+          <li>Code Next.js: <code>const email = headers().get('x-auth-request-email')</code></li>
+          <li>Code Express: <code>app.use((req,_,next) =&gt; { req.user = { email: req.headers['x-auth-request-email'] }; next() })</code></li>
+          <li>Code Python FastAPI: dependency đọc <code>request.headers.get('x-auth-request-email')</code></li>
+        </ul>
+      </div>
+
+      <div class="files">
+        <h4>Migration patterns</h4>
+        <table>
+          <tr><td>Nhóm A (IP whitelist only)</td><td><code>0 LOC</code></td><td>Chỉ đặt sau template, không sửa code</td></tr>
+          <tr><td>Nhóm B (account tự tạo)</td><td><code>50–150 LOC</code></td><td>Bỏ login/password, thêm middleware trust header, schema migrate</td></tr>
+          <tr><td>Schema migrate</td><td><code>migrations/*.sql</code></td><td>DROP password_hash, ADD zitadel_subject UNIQUE, TRUNCATE users (force re-register)</td></tr>
+          <tr><td>Doc</td><td><code>plans/reports/brainstorm-260626-1328-legacy-app-migration.md</code></td><td>Full patterns + cutover playbook</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. BACKUP CRON -->
+  <section id="backup" class="anchor mt-8">
+    <div class="card p-5">
+      <div class="svc-header">
+        <div>
+          <h3 class="text-lg font-semibold"><span class="num">⑦</span>backup cron <span class="pill amber ml-1">daily · 30-day retention</span></h3>
+          <p class="mut text-[12px] mt-1">Postgres dump daily 02:00 → <code>/opt/authway/backup/zitadel-YYYYMMDD-HHMM.dump</code></p>
+        </div>
+      </div>
+      <div class="role">
+        <h4>Lưu ý</h4>
+        <ul class="mt-3">
+          <li>Format <code>custom</code> (binary) — restore qua <code>pg_restore</code>, không phải <code>psql</code></li>
+          <li>Retention 30 ngày local; production cần offsite (rsync NAS / MinIO / S3)</li>
+          <li>Restore test monthly vào staging container — verify integrity</li>
+          <li>Log đường <code>/var/log/authway-backup.log</code> — alert nếu missed run</li>
+        </ul>
+      </div>
+      <div class="files">
+        <h4>Files</h4>
+        <table>
+          <tr><td>Script</td><td><code>infra/auth-server/scripts/backup-postgres.sh</code></td><td>pg_dump + cleanup + log</td></tr>
+          <tr><td>Cron</td><td><code>crontab -u authops</code></td><td><code>0 2 * * * /opt/authway/.../backup-postgres.sh</code></td></tr>
+          <tr><td>Destination</td><td><code>/opt/authway/backup/</code></td><td>Owner authops:authops, mode 0750</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. SYSTEMD -->
+  <section id="systemd" class="anchor mt-8">
+    <div class="card p-5">
+      <div class="svc-header">
+        <div>
+          <h3 class="text-lg font-semibold"><span class="num">⑧</span>systemd unit <span class="pill gray ml-1">auto-restart on boot</span></h3>
+          <p class="mut text-[12px] mt-1">Đảm bảo stack tự up sau reboot VPS</p>
+        </div>
+      </div>
+      <div class="role">
+        <h4>Unit file</h4>
+        <pre class="card2 p-3 mt-2 text-[12px] overflow-auto">[Unit]
+Description=Authway Zitadel stack
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/authway/infra/auth-server
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
+User=authops
+
+[Install]
+WantedBy=multi-user.target</pre>
+        <ul class="mt-3">
+          <li>oneshot + RemainAfterExit — Docker tự manage container lifecycle, systemd chỉ "khởi tạo lúc boot"</li>
+          <li>Verify sau reboot: <code>systemctl status authway</code> + <code>docker compose ps</code></li>
+          <li>App-vps tương tự — mỗi VPS có 1 unit riêng trỏ vào compose dir tương ứng</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- FUTURE / DEFERRED -->
+  <section id="future" class="anchor mt-8">
+    <div class="card p-5" style="border-color:#2a1f06;background:linear-gradient(180deg,#1a1407,#0e0e12)">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="pill amber">DEFERRED / OUT OF POC</span>
+        <span class="mut text-[12px]">Components đáng xem xét cho production</span>
+      </div>
+      <table class="k">
+        <thead><tr><th>Component</th><th>Vai trò</th><th>Khi nào cần</th></tr></thead>
+        <tbody>
+          <tr><td>HA Zitadel replica (2+ instance)</td><td>Loại single point of failure</td><td>Khi có ≥20 user / mất 5 phút downtime là không chấp nhận</td></tr>
+          <tr><td>Managed Postgres (Cloud SQL / RDS)</td><td>HA, PITR, automated backup</td><td>Cùng lúc với HA Zitadel</td></tr>
+          <tr><td>Prometheus + Grafana</td><td>Scrape metrics Zitadel + oauth2-proxy; alert latency, error rate</td><td>Sau khi rollout ≥3 app thật</td></tr>
+          <tr><td>Log shipping → OneLog</td><td>Audit log Zitadel ship qua Vector → VictoriaLogs (correlation cross-system)</td><td>Khi có OneLog production</td></tr>
+          <tr><td>Terraform Zitadel provider</td><td>IaC tạo Application + grant + project</td><td>Khi ≥10 app, manual UI quá tốn time</td></tr>
+          <tr><td>Tailscale / Zero-trust replace IP whitelist</td><td>WFH + device-identity thay vì subnet</td><td>Khi cần remote permanent</td></tr>
+          <tr><td>Federate Google Workspace</td><td>IDP source bổ sung — user login qua Google account</td><td>Optional, để fallback hoặc onboarding nhanh</td></tr>
+          <tr><td>M2M service account</td><td>client_credentials grant cho CI/CD, cron call internal API</td><td>Khi có script tự động hóa cross-app</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="mt-10 pt-5 border-t border-[#1f1f25] flex items-center justify-between text-xs mut">
+    <span>Authway · services detail · 2026-06-26</span>
+    <span>Đọc kèm: <code>docs/deployment-guide.md</code> · <code>authway-system-explainer.html</code></span>
+  </footer>
+</div>
+</body>
+</html>

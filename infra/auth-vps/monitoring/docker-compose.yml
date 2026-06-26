@@ -1,0 +1,47 @@
+name: authway-monitoring
+
+# Monitoring stack: Uptime Kuma probes Zitadel + Telegram alerts.
+# Red-team #6, #12: probe issuer endpoint, TLS expiry, Postgres disk, NTP, SMTP weekly.
+# Run separately: `docker compose -f monitoring/docker-compose.yml up -d`
+
+networks:
+  monitoring:
+    driver: bridge
+  # External link to main stack network for probing
+  authway-auth_edge:
+    external: true
+
+volumes:
+  uptime-kuma-data:
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    networks: [monitoring, authway-auth_edge]
+    # Only reachable via SSH tunnel — không expose public
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - uptime-kuma-data:/app/data
+
+  # Periodic check runner (cert expiry, disk, NTP)
+  health-checker:
+    image: alpine:3.20
+    restart: unless-stopped
+    networks: [monitoring]
+    volumes:
+      - ../scripts/check-health.sh:/check-health.sh:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      ZITADEL_EXTERNAL_DOMAIN: ${ZITADEL_EXTERNAL_DOMAIN}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache curl openssl bash docker-cli
+        while true; do
+          /check-health.sh || true
+          sleep 600
+        done
