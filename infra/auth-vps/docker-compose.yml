@@ -136,10 +136,12 @@ services:
       - "traefik.http.services.zitadel.loadbalancer.server.port=8080"
       - "traefik.http.services.zitadel.loadbalancer.server.scheme=h2c"
     healthcheck:
-      test: ["CMD", "/app/zitadel", "ready", "--config", "/zitadel-config.yaml"]
+      # --tlsMode external: zitadel chạy HTTP internal (Traefik terminate TLS)
+      test: ["CMD", "/app/zitadel", "ready", "--config", "/zitadel-config.yaml", "--tlsMode", "external"]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 30s
 
   traefik:
     image: traefik:v3.2
