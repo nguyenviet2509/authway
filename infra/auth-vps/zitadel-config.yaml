@@ -4,6 +4,11 @@
 Log:
   Level: info
 
+# TLS terminated ở Traefik. Zitadel chạy plain HTTP internal.
+# Ready healthcheck command đọc cờ này.
+TLS:
+  Enabled: false
+
 # Database — config trực tiếp qua YAML thay vì env (env var injection v2.66 có issue)
 # Substitute giá trị qua envsubst trong start script
 Database:
