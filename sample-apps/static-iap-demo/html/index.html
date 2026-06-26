@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Authway IAP Demo — Static</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main>
+      <h1>Authway IAP Demo — Static HTML</h1>
+      <p>App downstream chỉ là nginx serve static. Identity lấy qua oauth2-proxy <code>/oauth2/userinfo</code>.</p>
+
+      <h2>Identity</h2>
+      <table id="who"><tbody><tr><td colspan="2">Loading...</td></tr></tbody></table>
+
+      <h2>Try</h2>
+      <ul>
+        <li><a href="/oauth2/userinfo">/oauth2/userinfo</a> — JSON từ oauth2-proxy</li>
+        <li><a href="/oauth2/sign_out">/oauth2/sign_out</a> — logout</li>
+      </ul>
+
+      <script src="/whoami.js"></script>
+    </main>
+  </body>
+</html>

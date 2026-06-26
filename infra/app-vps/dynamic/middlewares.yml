@@ -1,0 +1,73 @@
+# Dynamic middlewares — app VPS (phase 02)
+# Red-team #2: strip X-Auth-* tại entrypoint level (declared in traefik.yml)
+# Red-team #1: forwardAuth dùng oauth2-proxy /oauth2/auth endpoint
+
+http:
+  middlewares:
+    # Strip X-Auth-* header từ client để chống spoof (red-team #2)
+    strip-auth-in:
+      headers:
+        customRequestHeaders:
+          X-Auth-Request-Email: ""
+          X-Auth-Request-User: ""
+          X-Auth-Request-Preferred-Username: ""
+          X-Auth-Request-Groups: ""
+          X-Forwarded-User: ""
+
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: strict-origin-when-cross-origin
+        # CSP strict — red-team #15 (vibe-code dễ XSS)
+        customResponseHeaders:
+          Content-Security-Policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+
+    # ForwardAuth cho nextjs app — gọi oauth2-proxy-nextjs:4180/oauth2/auth
+    nextjs-forwardauth:
+      forwardAuth:
+        address: "http://oauth2-proxy-nextjs:4180/oauth2/auth"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Auth-Request-User
+          - X-Auth-Request-Email
+          - X-Auth-Request-Preferred-Username
+          - X-Auth-Request-Groups
+
+    # ForwardAuth cho static app
+    static-forwardauth:
+      forwardAuth:
+        address: "http://oauth2-proxy-static:4180/oauth2/auth"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Auth-Request-User
+          - X-Auth-Request-Email
+          - X-Auth-Request-Preferred-Username
+          - X-Auth-Request-Groups
+
+    # Khi forwardAuth trả 401 → redirect đến /oauth2/start để bắt đầu login
+    nextjs-auth-redirect:
+      errors:
+        status:
+          - "401"
+        service: oauth2-proxy-nextjs@docker
+        query: "/oauth2/start?rd={url}"
+
+    static-auth-redirect:
+      errors:
+        status:
+          - "401"
+        service: oauth2-proxy-static@docker
+        query: "/oauth2/start?rd={url}"
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+
+  certificates:
+    - certFile: /etc/traefik/tls/app.crt
+      keyFile: /etc/traefik/tls/app.key

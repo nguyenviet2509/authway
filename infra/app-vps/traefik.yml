@@ -1,0 +1,43 @@
+# Traefik static config — app VPS (phase 02)
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+
+accessLog:
+  bufferingSize: 100
+
+api:
+  dashboard: true
+  insecure: true   # bind 127.0.0.1:8088 only
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":443"
+    http:
+      tls: {}
+      # Red-team #2: strip X-Auth-* tại entrypoint — chống template drift
+      middlewares:
+        - strip-auth-in@file
+        - security-headers@file
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: authway-app_edge
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true

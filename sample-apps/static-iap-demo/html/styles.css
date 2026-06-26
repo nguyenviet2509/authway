@@ -1,0 +1,4 @@
+body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 16px; }
+table { border-collapse: collapse; }
+td { padding: 6px 12px; border-bottom: 1px solid #eee; }
+code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
