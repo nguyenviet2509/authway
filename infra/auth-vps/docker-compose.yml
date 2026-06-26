@@ -145,6 +145,9 @@ services:
     image: traefik:v3.2
     restart: unless-stopped
     networks: [edge]
+    environment:
+      # Override Docker SDK client API version để khớp daemon (>=1.40)
+      DOCKER_API_VERSION: "1.43"
     ports:
       - "80:80"
       - "443:443"
