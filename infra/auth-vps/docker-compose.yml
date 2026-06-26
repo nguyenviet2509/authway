@@ -126,15 +126,15 @@ services:
       zitadel-setup:
         condition: service_completed_successfully
     labels:
-      traefik.enable: "true"
-      traefik.docker.network: authway-auth_edge
-      traefik.http.routers.zitadel.rule: Host(`${ZITADEL_EXTERNAL_DOMAIN}`)
-      traefik.http.routers.zitadel.entrypoints: websecure
-      traefik.http.routers.zitadel.tls: "true"
+      - "traefik.enable=true"
+      - "traefik.docker.network=authway-auth_edge"
+      - "traefik.http.routers.zitadel.rule=Host(`${ZITADEL_EXTERNAL_DOMAIN}`)"
+      - "traefik.http.routers.zitadel.entrypoints=websecure"
+      - "traefik.http.routers.zitadel.tls=true"
       # Rate-limit auth paths (red-team #14)
-      traefik.http.routers.zitadel.middlewares: ratelimit-auth@file,security-headers@file
-      traefik.http.services.zitadel.loadbalancer.server.port: "8080"
-      traefik.http.services.zitadel.loadbalancer.server.scheme: h2c
+      - "traefik.http.routers.zitadel.middlewares=ratelimit-auth@file,security-headers@file"
+      - "traefik.http.services.zitadel.loadbalancer.server.port=8080"
+      - "traefik.http.services.zitadel.loadbalancer.server.scheme=h2c"
     healthcheck:
       test: ["CMD", "/app/zitadel", "ready", "--config", "/zitadel-config.yaml"]
       interval: 30s
