@@ -1,0 +1,55 @@
+# Traefik static config — app IAP template
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+
+accessLog:
+  bufferingSize: 100
+
+api:
+  dashboard: true
+  insecure: true   # bind 127.0.0.1:8088 only (đã limit trong docker-compose.yml)
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  websecure:
+    address: ":443"
+    http:
+      tls: {}
+      # Strip X-Auth-* tại entrypoint — chống template drift + header spoof từ client
+      middlewares:
+        - strip-auth-in@file
+        - security-headers@file
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: authway-app_edge
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+# ─── Production: Let's Encrypt qua DNS-01 ─────────────────────────────
+# Uncomment block dưới + xoá tls/ self-signed khi promote production.
+#
+# certificatesResolvers:
+#   le:
+#     acme:
+#       email: ops@company.com
+#       storage: /acme/acme.json
+#       dnsChallenge:
+#         provider: cloudflare   # hoặc route53, gandi, ...
+#         delayBeforeCheck: 0

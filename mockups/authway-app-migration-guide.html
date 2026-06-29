@@ -1,0 +1,1089 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<title>Authway · App Migration Guide — Cấu hình & Lý do</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0a0a0b;--card:#111114;--card2:#0e0e12;--line:#1f1f25;
+    --mut:#8a8a96;--fg:#ededf0;--acc:#7dd3fc;--acc2:#a5f3fc;
+    --warn:#fbbf24;--ok:#34d399;--err:#f87171;--vio:#c4b5fd;
+  }
+  html,body{background:var(--bg);color:var(--fg);font-family:Inter,ui-sans-serif,system-ui}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px}
+  .card2{background:var(--card2);border:1px solid var(--line);border-radius:10px}
+  .mut{color:var(--mut)} .acc{color:var(--acc)}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .err{color:var(--err)} .vio{color:var(--vio)}
+  .h-title{font-size:12px;text-transform:uppercase;letter-spacing:.18em;color:var(--mut)}
+  pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .step-num{width:26px;height:26px;border-radius:6px;background:#15151a;border:1px solid var(--line);display:inline-grid;place-items:center;font-size:12px;color:var(--acc);font-weight:600}
+  .mermaid{background:transparent}
+  .pill{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:.04em}
+  .pill.cyan{background:#082f3f;color:#7dd3fc}
+  .pill.lime{background:#0c2a12;color:#86efac}
+  .pill.amber{background:#2a1f06;color:#fbbf24}
+  .pill.vio{background:#1f1a3a;color:#c4b5fd}
+  .pill.red{background:#2a0a0a;color:#fda4af}
+  .pill.gray{background:#15151a;color:#cdd2d8}
+  table.k{width:100%;font-size:13px;border-collapse:collapse}
+  table.k th,table.k td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  table.k th{color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.1em}
+  .why{background:#0c1a1f;border-left:3px solid var(--acc);padding:10px 14px;border-radius:6px;font-size:13px}
+  .why::before{content:"💡 VÌ SAO";display:block;color:var(--acc);font-size:10px;letter-spacing:.15em;font-weight:600;margin-bottom:4px}
+  .danger{background:#1f0a0a;border-left:3px solid var(--err);padding:10px 14px;border-radius:6px;font-size:13px}
+  .danger::before{content:"⚠ KHÔNG ĐƯỢC";display:block;color:var(--err);font-size:10px;letter-spacing:.15em;font-weight:600;margin-bottom:4px}
+  code.inline{background:#15151a;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-size:12px}
+  pre.code{background:#0d0d11;border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:12px;overflow-x:auto;line-height:1.55}
+  .sect{scroll-margin-top:24px}
+  .toc a{color:var(--mut);font-size:13px} .toc a:hover{color:var(--fg)}
+  .badge-vps{display:inline-flex;gap:6px;align-items:center;padding:3px 10px;border-radius:999px;background:#15151a;border:1px solid var(--line);font-size:11px}
+  .badge-vps .dot{width:7px;height:7px;border-radius:50%}
+</style>
+</head>
+<body>
+<div class="max-w-[1280px] mx-auto p-6 space-y-8">
+
+  <!-- HEADER -->
+  <header class="card p-6">
+    <div class="flex items-baseline justify-between gap-4 flex-wrap">
+      <div>
+        <div class="h-title mb-1">Authway · Migration Playbook</div>
+        <h1 class="text-2xl font-semibold">Áp Zitadel cho app team — Cấu hình ở 3 nơi</h1>
+        <p class="mut text-sm mt-2 max-w-3xl">Hướng dẫn cấu hình & lý do tại sao. 3 nơi cần đụng: <span class="acc">Auth Server</span> (1 lần), <span class="vio">Admin Console</span> (mỗi app 1 lần), <span class="ok">App của Member</span> (mỗi app).</p>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <span class="pill cyan">IAP Pattern</span>
+        <span class="pill lime">Zitadel + oauth2-proxy</span>
+        <span class="pill amber">Multi-VPS</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ARCHITECTURE OVERVIEW -->
+  <section id="overview" class="card p-6 sect">
+    <div class="h-title mb-3">1 · Tổng quan kiến trúc</div>
+    <h2 class="text-xl font-semibold mb-4">Mỗi app 1 VPS riêng, auth tập trung 1 VPS</h2>
+
+    <div class="mermaid mb-4">
+flowchart LR
+  classDef auth fill:#082f3f,stroke:#7dd3fc,color:#e0f7ff
+  classDef app fill:#0c2a12,stroke:#86efac,color:#dcfce7
+  classDef edge fill:#1f1a3a,stroke:#c4b5fd,color:#ede9fe
+  classDef user fill:#15151a,stroke:#8a8a96,color:#ededf0
+
+  U[👤 Dev / User<br/>Trình duyệt]:::user
+
+  subgraph AUTH[🔐 Auth VPS - 1 server tập trung]
+    Z[Zitadel<br/>OIDC Issuer]:::auth
+    PG[(Postgres<br/>users + MFA)]:::auth
+    TR1[Traefik 443]:::edge
+    Z --- PG
+    TR1 --> Z
+  end
+
+  subgraph APP1[📦 App VPS A - app-server-mgmt]
+    TR2[Traefik 443]:::edge
+    OP1[oauth2-proxy]:::edge
+    A1[App code<br/>đọc header]:::app
+    TR2 --> OP1 --> A1
+  end
+
+  subgraph APP2[📦 App VPS B - app-mail-mgmt]
+    TR3[Traefik 443]:::edge
+    OP2[oauth2-proxy]:::edge
+    A2[App code]:::app
+    TR3 --> OP2 --> A2
+  end
+
+  subgraph APP3[📦 App VPS C - app-N]
+    TR4[Traefik 443]:::edge
+    OP3[oauth2-proxy]:::edge
+    A3[App code]:::app
+    TR4 --> OP3 --> A3
+  end
+
+  U --> TR2
+  U --> TR3
+  U --> TR4
+  OP1 -.OIDC redirect + token.-> Z
+  OP2 -.OIDC.-> Z
+  OP3 -.OIDC.-> Z
+    </div>
+
+    <div class="why">
+      <strong>Nguyên tắc IAP (Identity-Aware Proxy):</strong> App downstream KHÔNG biết Zitadel tồn tại. Mọi OIDC handshake do <code class="inline">oauth2-proxy</code> đảm nhiệm. App chỉ đọc HTTP header <code class="inline">X-Auth-Request-Email</code> để biết user là ai. Một quy ước duy nhất cho mọi stack (Next.js / FastAPI / Django / Flask…).
+    </div>
+  </section>
+
+  <!-- LOGIN FLOW -->
+  <section id="flow" class="card p-6 sect">
+    <div class="h-title mb-3">2 · Luồng login chi tiết</div>
+    <h2 class="text-xl font-semibold mb-4">Browser → App → Zitadel → quay lại App</h2>
+
+    <div class="mermaid mb-4">
+sequenceDiagram
+  autonumber
+  participant B as 🌐 Browser
+  participant T as Traefik (app-vps)
+  participant O as oauth2-proxy
+  participant Z as Zitadel (auth-vps)
+  participant A as App
+
+  B->>T: GET https://app.company.com/
+  T->>O: forwardAuth check
+  O-->>T: 401 (chưa có cookie)
+  T-->>B: 302 redirect /oauth2/start
+  B->>O: /oauth2/start
+  O-->>B: 302 redirect Zitadel /authorize?...
+  B->>Z: /authorize (login form + MFA)
+  Note over Z: User nhập username + password + TOTP/Passkey
+  Z-->>B: 302 redirect app/oauth2/callback?code=xxx
+  B->>O: /oauth2/callback?code=xxx
+  O->>Z: POST /oauth/token (code → access_token)
+  Z-->>O: id_token + access_token + refresh_token
+  O->>O: Set encrypted cookie + lưu token nội bộ
+  O-->>B: 302 redirect /
+  B->>T: GET /
+  T->>O: forwardAuth check
+  O-->>T: 200 + X-Auth-Request-Email
+  T->>A: forward request kèm header
+  A-->>B: HTML response (đã biết user)
+    </div>
+
+    <div class="why">
+      <strong>Vì sao tách oauth2-proxy ra khỏi app code?</strong> OIDC code flow + token refresh + PKCE + state validation có nhiều edge case bảo mật. Một implementation chuẩn (oauth2-proxy) dùng chung cho 10 app an toàn hơn 10 implementation riêng. App dev không phải hiểu OIDC.
+    </div>
+  </section>
+
+  <!-- APP CLASSIFICATION -->
+  <section id="groups" class="card p-6 sect">
+    <div class="h-title mb-3">Phân loại app — Nhóm A / B / C / Shared</div>
+    <h2 class="text-xl font-semibold mb-4">Xác định nhóm trước khi migrate (effort khác nhau rất nhiều)</h2>
+
+    <div class="grid md:grid-cols-2 gap-4">
+
+      <div class="card2 p-4">
+        <div class="flex items-baseline gap-2 mb-2">
+          <span class="pill lime">Nhóm A</span>
+          <h3 class="font-semibold ok">IP whitelist / VPN only</h3>
+        </div>
+        <p class="text-sm mb-2"><strong>Đặc điểm:</strong> App không có concept "user". Ai vào được mạng/VPN thì xài. Không có login form, không có DB users, không có session.</p>
+        <p class="text-sm mut mb-2"><strong>Ví dụ:</strong> Dashboard Grafana nội bộ chưa setup auth, internal docs/wiki, admin panel chạy trong subnet, Streamlit dashboard read-only.</p>
+        <div class="text-xs mut"><span class="ok">Effort:</span> 0 LOC code · ~15 phút infra · Low risk</div>
+        <div class="why mt-3" style="font-size:12px">Chỉ thêm oauth2-proxy ở edge — app code không biết gì cả. App tự nhiên có per-user audit ở Zitadel level, dù app không hiểu user là ai.</div>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-baseline gap-2 mb-2">
+          <span class="pill red">Nhóm B</span>
+          <h3 class="font-semibold err">Account tự tạo (login form + password)</h3>
+        </div>
+        <p class="text-sm mb-2"><strong>Đặc điểm:</strong> App có DB <code class="inline">users</code> với <code class="inline">password_hash</code>, login form, register, reset password, session cookie, data ownership per-user (vd <code class="inline">posts.user_id</code>).</p>
+        <p class="text-sm mut mb-2"><strong>Ví dụ:</strong> CMS, project management, ticket system, app CRUD có "my data" view.</p>
+        <div class="text-xs mut"><span class="err">Effort:</span> 50–150 LOC code · 2–4h · Medium risk (DB migration)</div>
+        <div class="why mt-3" style="font-size:12px">Bỏ toàn bộ auth code, thay bằng middleware đọc header. Schema migration: <code class="inline">password_hash</code> ra, <code class="inline">zitadel_subject</code> vào. Auto-provision user lần đầu login.</div>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-baseline gap-2 mb-2">
+          <span class="pill vio">Nhóm C</span>
+          <h3 class="font-semibold vio">Không support middleware / framework hạn chế</h3>
+        </div>
+        <p class="text-sm mb-2"><strong>Đặc điểm:</strong> Stack không có middleware pattern truyền thống, không inject được auth check trước mọi request. Hoặc framework quá cũ/đặc thù để thay đổi.</p>
+        <p class="text-sm mut mb-2"><strong>Ví dụ:</strong> Streamlit &lt; 1.37, Gradio, Jupyter Notebook deploy, Shiny R, app PHP legacy không có middleware hook.</p>
+        <div class="text-xs mut"><span class="vio">Effort:</span> 10–30 phút · 2 strategy</div>
+        <div class="why mt-3" style="font-size:12px"><strong>Strategy 1:</strong> Treat như Nhóm A (oauth2-proxy + IP whitelist, app không biết user). Mất per-user audit ở app level nhưng Zitadel vẫn có.<br/><strong>Strategy 2:</strong> Upgrade lên version có support (Streamlit ≥1.37 có <code class="inline">st.context.headers</code>) → trở thành Nhóm B.</div>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-baseline gap-2 mb-2">
+          <span class="pill amber">Shared</span>
+          <h3 class="font-semibold warn">1 account dùng chung cả team</h3>
+        </div>
+        <p class="text-sm mb-2"><strong>Đặc điểm:</strong> App có login form nhưng cả team dùng chung 1 account (<code class="inline">admin/Admin@2024</code>). Không có per-user data, không có audit.</p>
+        <p class="text-sm mut mb-2"><strong>Ví dụ:</strong> Admin panel infra (server-mgmt, DNS, mail) — pattern phổ biến nhất gây risk.</p>
+        <div class="text-xs mut"><span class="warn">Effort:</span> ~10 LOC (bỏ login form) · 30 phút · Low risk</div>
+        <div class="why mt-3" style="font-size:12px">Bỏ login form, mỗi member có Zitadel user riêng → MFA + audit per-user + revoke centralized. Đây là case mang lại GIÁ TRỊ AN NINH lớn nhất (chính là lý do dùng Zitadel ban đầu).</div>
+      </div>
+
+    </div>
+
+    <h3 class="font-semibold mb-3 mt-6">Quyết định nhanh — flowchart phân loại</h3>
+    <div class="mermaid">
+flowchart TD
+  Q1{App có login form<br/>+ password không?}
+  Q1 -->|Không| Q2{Stack có middleware<br/>hook không?}
+  Q1 -->|Có| Q3{Account riêng<br/>per-user hay shared?}
+  Q2 -->|Có| A[<span style='color:#86efac'>Nhóm A</span><br/>0 LOC, 15 phút]
+  Q2 -->|Không / hạn chế| C[<span style='color:#c4b5fd'>Nhóm C</span><br/>F1: như A, F2: upgrade]
+  Q3 -->|Per-user + có data ownership| B[<span style='color:#f87171'>Nhóm B</span><br/>50-150 LOC, 2-4h]
+  Q3 -->|Shared 1 account| S[<span style='color:#fbbf24'>Shared</span><br/>~10 LOC, 30 phút]
+    </div>
+  </section>
+
+  <!-- TABLE OF CONTENTS -->
+  <section class="card p-6 toc">
+    <div class="h-title mb-3">Mục lục — 3 nơi cần cấu hình</div>
+    <div class="grid md:grid-cols-3 gap-4 mt-2">
+      <a href="#part-auth" class="card2 p-4 block hover:border-cyan-400">
+        <div class="pill cyan mb-2">PART 1</div>
+        <div class="font-semibold acc">Auth Server VPS</div>
+        <div class="mut text-xs mt-1">Cấu hình 1 lần. Deploy Zitadel + Postgres + Traefik. Nơi chứa user + MFA + audit log.</div>
+      </a>
+      <a href="#part-admin" class="card2 p-4 block hover:border-violet-400">
+        <div class="pill vio mb-2">PART 2</div>
+        <div class="font-semibold vio">Admin Console</div>
+        <div class="mut text-xs mt-1">Mỗi app cần làm 1 lần qua UI: tạo OIDC client, lấy ID + Secret, set redirect URI.</div>
+      </a>
+      <a href="#part-app" class="card2 p-4 block hover:border-emerald-400">
+        <div class="pill lime mb-2">PART 3</div>
+        <div class="font-semibold ok">App của Member</div>
+        <div class="mut text-xs mt-1">Mỗi app trên VPS riêng: cài Traefik + oauth2-proxy, sửa code đọc header.</div>
+      </a>
+    </div>
+  </section>
+
+  <!-- PART 1: AUTH SERVER -->
+  <section id="part-auth" class="card p-6 sect">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="pill cyan">PART 1</span>
+      <h2 class="text-xl font-semibold acc">Trên Auth Server VPS (làm 1 lần)</h2>
+    </div>
+
+    <div class="card2 p-4 mb-4">
+      <div class="h-title mb-2">Bố cục VPS</div>
+      <div class="mermaid">
+flowchart TB
+  classDef auth fill:#082f3f,stroke:#7dd3fc,color:#e0f7ff
+  subgraph AUTHVPS[🔐 auth.company.com - Ubuntu 24.04, 4-16GB RAM]
+    direction TB
+    TR[Traefik v3.4<br/>:80, :443 TLS terminate]:::auth
+    Z[Zitadel container<br/>:8080 HTTP nội bộ]:::auth
+    PG[(Postgres 16<br/>không expose port host)]:::auth
+    MH[Mailhog / SMTP relay<br/>cho email verify]:::auth
+    TR --> Z
+    Z --> PG
+    Z --> MH
+  end
+      </div>
+    </div>
+
+    <h3 class="font-semibold mb-3 mt-6">Các bước cấu hình</h3>
+    <div class="space-y-4">
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">1</span><span class="font-semibold">Provision VPS + Docker + UFW</span></div>
+        <pre class="code">curl -fsSL https://get.docker.com | sh
+sudo apt install docker-compose-plugin gettext-base
+sudo ufw allow from &lt;VPN_SUBNET&gt; to any port 22,80,443
+sudo ufw default deny incoming
+sudo timedatectl set-ntp true   # NTP quan trọng cho TOTP</pre>
+        <div class="why mt-3">NTP phải sync — TOTP code phụ thuộc đồng hồ. Lệch &gt;30s = login fail. UFW chỉ allow VPN subnet — defense in depth, đề phòng port leak.</div>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">2</span><span class="font-semibold">Generate secrets + render config</span></div>
+        <pre class="code">openssl rand -base64 32   # ZITADEL_MASTERKEY → lưu Bitwarden + sealed envelope
+openssl rand -hex 24      # POSTGRES_PASSWORD
+openssl rand -hex 24      # ZITADEL_DB_PASSWORD</pre>
+        <div class="danger mt-3">Mất <code class="inline">ZITADEL_MASTERKEY</code> = backup vô dụng. Mọi TOTP seed, OIDC client_secret, refresh token trong DB được mã hoá bởi key này. Backup ≥2 nơi.</div>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">3</span><span class="font-semibold"><code class="inline">docker compose up -d</code> stack auth</span></div>
+        <div class="text-sm mut mb-2">Reference: <code class="inline">infra/auth-vps/docker-compose.yml</code></div>
+        <pre class="code">cd /opt/authway/infra/auth-vps
+bash scripts/render-config.sh   # envsubst zitadel-config.yaml
+docker compose up -d
+docker compose logs -f zitadel-setup   # đợi "setup completed"</pre>
+        <div class="why mt-3">Compose tự chạy 3 service tuần tự: <code class="inline">postgres → zitadel-init → zitadel-setup → zitadel</code>. Init tạo schema, setup tạo org + admin user, start chạy production. Traefik route domain → Zitadel internal HTTP.</div>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">4</span><span class="font-semibold">DNS</span></div>
+        <pre class="code"># DNS thật (production):
+auth.company.com  A  &lt;auth-vps-ip&gt;
+
+# Hoặc /etc/hosts (lab):
+192.168.122.54  auth.lab.local</pre>
+        <div class="why mt-3">Mọi app sẽ trỏ về 1 domain auth duy nhất. Đổi domain auth = phải update <code class="inline">redirect_uri</code> trong mọi OIDC client. Chọn domain stable từ đầu.</div>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">5</span><span class="font-semibold">First login + bind MFA + đổi password</span></div>
+        <ol class="text-sm space-y-1 ml-4 list-decimal">
+          <li>Mở <code class="inline">https://auth.company.com/ui/console</code></li>
+          <li>Login với <code class="inline">ZITADEL_ADMIN_USERNAME</code> + password initial</li>
+          <li>Bắt buộc đổi password</li>
+          <li>Settings → Multi-Factor → bind Passkey (production) hoặc TOTP (lab self-signed)</li>
+        </ol>
+        <div class="why mt-3">Password initial trong <code class="inline">.env</code> là throwaway. Đổi ngay sau login đầu tiên để không ai còn biết. MFA bind ngay vì sau khi enable Force MFA mà chưa có device = bị lock chính mình ra.</div>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">6</span><span class="font-semibold">Set security policies</span></div>
+        <table class="k">
+          <thead><tr><th>Policy</th><th>Giá trị</th><th>Vì sao</th></tr></thead>
+          <tbody>
+            <tr><td>Force MFA</td><td><span class="ok">ON</span></td><td>App infra-critical, leak password vẫn không vào được</td></tr>
+            <tr><td>Allow Register</td><td><span class="err">OFF</span></td><td>Admin tạo user only — chống attacker tự đăng ký</td></tr>
+            <tr><td>Allow External IDP</td><td><span class="err">OFF</span></td><td>Chỉ local users, không federation Google/GitHub</td></tr>
+            <tr><td>Hide Password Reset</td><td><span class="ok">ON</span></td><td>Self-service reset = social engineering vector</td></tr>
+            <tr><td>Max Password Attempts</td><td>5</td><td>Brute force protection</td></tr>
+            <tr><td>Password complexity</td><td>12+, 4 nhóm ký tự</td><td>Chống dictionary attack</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">7</span><span class="font-semibold">Tạo break-glass admin + sealed credential</span></div>
+        <p class="text-sm mut mb-2">User 2: founder/sếp với role <code class="inline">IAM_OWNER</code>. Password + TOTP backup in giấy → sealed envelope → safe.</p>
+        <div class="why">Single admin = bus factor 1. Admin chính mất laptop/quit = mất toàn bộ quyền quản lý Zitadel. Break-glass là phương án cuối, test 6 tháng/lần.</div>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">8</span><span class="font-semibold">Backup + restore drill</span></div>
+        <pre class="code">docker compose exec -T postgres pg_dump -U postgres -d zitadel \
+  --format=custom --no-owner --clean \
+  | age -r &lt;PUBKEY&gt; \
+  | rclone rcat s3:authway-backup/zitadel-$(date +%F-%H).dump.age</pre>
+        <div class="why mt-3">Hourly backup + age encrypt + offsite S3. Không có backup test restore = không có backup. Drill monthly bắt buộc.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- PART 2: ADMIN CONSOLE -->
+  <section id="part-admin" class="card p-6 sect">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="pill vio">PART 2</span>
+      <h2 class="text-xl font-semibold vio">Trong Admin Console (mỗi app làm 1 lần)</h2>
+    </div>
+
+    <div class="card2 p-4 mb-4">
+      <div class="h-title mb-2">Mô hình</div>
+      <div class="mermaid">
+flowchart LR
+  classDef obj fill:#1f1a3a,stroke:#c4b5fd,color:#ede9fe
+  ORG[🏢 Organization<br/>company]:::obj
+  PROJ[📁 Project<br/>internal-apps]:::obj
+  APP1[🔑 App: server-mgmt<br/>client_id + secret]:::obj
+  APP2[🔑 App: mail-mgmt]:::obj
+  APP3[🔑 App: hosting-mgmt]:::obj
+  U1[👤 user1@company.com]:::obj
+  U2[👤 user2@company.com]:::obj
+  ORG --> PROJ --> APP1
+  PROJ --> APP2
+  PROJ --> APP3
+  ORG --> U1
+  ORG --> U2
+  U1 -.có quyền login.-> APP1
+  U1 -.-> APP2
+  U2 -.-> APP1
+      </div>
+    </div>
+
+    <div class="why mb-4">
+      <strong>Cấu trúc Zitadel:</strong> 1 Organization chứa nhiều Project, mỗi Project chứa nhiều OIDC Application. Mỗi App = 1 client_id + client_secret + redirect URI. Users sống ở Org level, có thể login vào bất kỳ App nào trong Project.
+    </div>
+
+    <h3 class="font-semibold mb-3 mt-6">Bước cấu hình cho mỗi app mới</h3>
+    <div class="space-y-4">
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">1</span><span class="font-semibold">Tạo Project (1 lần đầu)</span></div>
+        <p class="text-sm mut">Top nav → Projects → <strong>+ New</strong> → Name: <code class="inline">internal-apps</code></p>
+        <div class="why mt-2">Gom tất cả app nội bộ vào 1 project. Phân quyền user theo project sau này dễ. Sau này có thể tách project khác nếu muốn restrict subset user vào subset app.</div>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">2</span><span class="font-semibold">Tạo OIDC Application cho từng app</span></div>
+        <p class="text-sm mut mb-2">Vào Project → Applications tab → <strong>+ New</strong></p>
+        <table class="k">
+          <thead><tr><th>Field</th><th>Giá trị</th><th>Vì sao</th></tr></thead>
+          <tbody>
+            <tr><td>Name</td><td><code class="inline">app-server-mgmt</code></td><td>Identifier trong console</td></tr>
+            <tr><td>Application Type</td><td><span class="pill vio">Web</span></td><td>Server-side app (oauth2-proxy giữ secret)</td></tr>
+            <tr><td>Authentication Method</td><td><span class="pill vio">Basic</span></td><td>Cần client_secret. KHÔNG dùng None/PKCE vì oauth2-proxy expect secret</td></tr>
+            <tr><td>Response Types</td><td>Code</td><td>Authorization Code flow chuẩn</td></tr>
+            <tr><td>Grant Types</td><td>Authorization Code + Refresh Token</td><td>Refresh Token để session tự renew, không phải login lại mỗi 1h</td></tr>
+            <tr><td>Redirect URI</td><td><code class="inline">https://app.company.com/oauth2/callback</code></td><td>Zitadel chỉ redirect về URL này sau login. Whitelist chống open redirect attack</td></tr>
+            <tr><td>Post Logout URI</td><td><code class="inline">https://app.company.com/</code></td><td>Sau logout về home app</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">3</span><span class="font-semibold">Lưu Client ID + Client Secret</span></div>
+        <div class="danger">Client Secret hiển thị 1 LẦN duy nhất khi Save. Copy ngay vào password manager. Nếu lỡ đóng dialog: Application detail → Actions → <strong>Regenerate Client Secret</strong> (sẽ break app đang dùng secret cũ).</div>
+      </div>
+
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">4</span><span class="font-semibold">Tạo user team members (1 lần khi onboard người mới)</span></div>
+        <p class="text-sm mut mb-2">Top nav → Users → <strong>+ New → Human</strong></p>
+        <ul class="text-sm space-y-1 ml-4 list-disc">
+          <li>Username (vd <code class="inline">john.doe</code>), email, first + last name</li>
+          <li>Tick <strong>Email already verified</strong> (skip email verify lab; production có thể bỏ tick)</li>
+          <li>Initial password ≥12 chars, 4 nhóm ký tự</li>
+          <li>Copy <strong>Login Name</strong> (vd <code class="inline">john.doe@company.zitadel.cloud</code>) đưa cho member</li>
+        </ul>
+        <div class="why mt-2">User Zitadel độc lập với mọi app. Member login 1 lần → vào được mọi app team. Offboarding: deactivate 1 user = mất quyền tất cả app ngay lập tức.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- PART 3: APP -->
+  <section id="part-app" class="card p-6 sect">
+    <div class="flex items-center gap-3 mb-4">
+      <span class="pill lime">PART 3</span>
+      <h2 class="text-xl font-semibold ok">Trên VPS App của mỗi member (mỗi app)</h2>
+    </div>
+
+    <div class="card2 p-4 mb-4">
+      <div class="h-title mb-2">Bố cục VPS App (template chung cho mọi app)</div>
+      <div class="mermaid">
+flowchart TB
+  classDef edge fill:#1f1a3a,stroke:#c4b5fd,color:#ede9fe
+  classDef app fill:#0c2a12,stroke:#86efac,color:#dcfce7
+  subgraph APPVPS[📦 app.company.com - app-vps]
+    direction TB
+    TR[Traefik v3.4<br/>:80, :443 TLS]:::edge
+    OP[oauth2-proxy :4180<br/>OIDC client cho app]:::edge
+    APP[App container<br/>KHÔNG expose Traefik]:::app
+    TR --> OP --> APP
+  end
+  EXT[🌐 Browser member] --> TR
+  OP -.OIDC.-> ZIT[(Zitadel auth-vps)]
+      </div>
+    </div>
+
+    <div class="why mb-4">
+      <strong>Tách container app vs container oauth2-proxy:</strong> oauth2-proxy là entry point duy nhất (Traefik route trỏ vào nó). App container không có Traefik label, chỉ reachable qua docker network nội bộ từ oauth2-proxy. Bypass oauth2-proxy = bypass auth. Network segmentation đảm bảo không có shortcut.
+    </div>
+
+    <h3 class="font-semibold mb-3 mt-6">Checklist 6 bước</h3>
+    <div class="space-y-4">
+
+      <!-- Step 1 -->
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">1</span><span class="font-semibold">Provision VPS giống auth-vps (Docker, UFW, NTP)</span></div>
+        <pre class="code">curl -fsSL https://get.docker.com | sh
+sudo apt install docker-compose-plugin
+sudo timedatectl set-ntp true
+sudo ufw allow from &lt;VPN_SUBNET&gt; to any port 22,80,443
+sudo ufw default deny incoming</pre>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">2</span><span class="font-semibold">DNS resolve auth.company.com (nếu lab)</span></div>
+        <pre class="code"># /etc/hosts trên app-vps
+&lt;auth-vps-ip&gt;  auth.company.com</pre>
+        <div class="why mt-2">Container oauth2-proxy phải gọi được Zitadel qua HTTPS. Lab: dùng <code class="inline">extra_hosts</code> trong docker-compose. Production: DNS thật, không cần.</div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">3</span><span class="font-semibold">Tạo <code class="inline">docker-compose.yml</code> + <code class="inline">.env</code></span></div>
+        <p class="text-sm mut mb-2">Copy template từ <code class="inline">infra/app-vps/docker-compose.yml</code>. Mỗi VPS chỉ 1 app → 1 oauth2-proxy, 1 app service.</p>
+        <pre class="code"># .env
+APP_HOSTNAME=app.company.com
+ZITADEL_HOSTNAME=auth.company.com
+ZITADEL_ISSUER_URL=https://auth.company.com
+APP_CLIENT_ID=&lt;copy từ Zitadel console&gt;
+APP_CLIENT_SECRET=&lt;copy từ Zitadel console&gt;
+APP_COOKIE_SECRET=&lt;openssl rand -base64 32 | tr -d '/+=' | cut -c1-32&gt;</pre>
+        <div class="why mt-2">4 biến/app: hostname, client_id, client_secret, cookie_secret. Cookie secret để mã hoá session cookie (HMAC), KHÁC client_secret (cấp bởi Zitadel). Generate cookie secret độc lập per app.</div>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">4</span><span class="font-semibold">Service block trong docker-compose.yml</span></div>
+        <pre class="code">services:
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+    command:
+      - --provider=oidc
+      - --oidc-issuer-url=${ZITADEL_ISSUER_URL}
+      - --client-id=${APP_CLIENT_ID}
+      - --client-secret=${APP_CLIENT_SECRET}
+      - --cookie-secret=${APP_COOKIE_SECRET}
+      - --cookie-domain=${APP_HOSTNAME}
+      - --cookie-secure=true
+      - --cookie-refresh=1h
+      - --redirect-url=https://${APP_HOSTNAME}/oauth2/callback
+      - --upstream=http://app:3000
+      - --reverse-proxy=true
+      - --set-xauthrequest=true        # inject X-Auth-Request-* header
+      - --pass-access-token=false      # KHÔNG leak token xuống app
+      - --skip-provider-button=true
+      - --email-domain=*
+    extra_hosts:
+      - "${ZITADEL_HOSTNAME}:&lt;auth-vps-ip&gt;"   # chỉ cần lab
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.app.rule=Host(`${APP_HOSTNAME}`)
+      - traefik.http.routers.app.tls=true
+      - traefik.http.services.app.loadbalancer.server.port=4180
+
+  app:
+    image: &lt;app-image&gt;
+    # KHÔNG có traefik labels → chỉ reachable qua oauth2-proxy nội bộ</pre>
+      </div>
+
+      <!-- Step 5 -->
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">5</span><span class="font-semibold">Sửa app code — bỏ auth cũ, đọc header</span></div>
+        <p class="text-sm mut mb-2">Theo loại auth hiện tại:</p>
+
+        <table class="k mb-4">
+          <thead><tr><th>Nhóm</th><th>Auth hiện tại</th><th>Code change</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="pill lime">A</span></td>
+              <td>IP whitelist / VPN only</td>
+              <td><strong>0 LOC</strong> — không sửa code. Chỉ thêm infra.</td>
+            </tr>
+            <tr>
+              <td><span class="pill amber">Shared</span></td>
+              <td>1 account dùng chung</td>
+              <td>Bỏ login form (~10 LOC). Mỗi member dùng Zitadel user riêng.</td>
+            </tr>
+            <tr>
+              <td><span class="pill red">B</span></td>
+              <td>Account tự tạo + login form + password</td>
+              <td>~50–150 LOC: bỏ auth code, thêm middleware read header + DB migration</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p class="text-sm mut mb-2"><strong>Bỏ:</strong></p>
+        <ul class="text-sm space-y-1 ml-4 list-disc mut mb-3">
+          <li>Login / register / reset password routes + UI form</li>
+          <li>Cột <code class="inline">password_hash</code>, <code class="inline">reset_token</code> trong DB</li>
+          <li>Password verify logic, email verify flow</li>
+          <li>Session/cookie tự quản (oauth2-proxy lo)</li>
+          <li>OAuth library: <code class="inline">passport</code>, <code class="inline">next-auth</code>, <code class="inline">authlib</code>…</li>
+        </ul>
+
+        <p class="text-sm mut mb-2"><strong>Thêm:</strong> 1 middleware đọc header (~15 LOC)</p>
+
+        <details class="mb-2"><summary class="cursor-pointer acc text-sm">▸ Next.js (App Router)</summary>
+        <pre class="code mt-2">// app/page.tsx
+import { headers } from 'next/headers';
+const h = headers();
+const email = h.get('x-auth-request-email');
+const sub = h.get('x-auth-request-user');
+// ... user đã được auth, không cần check thêm</pre>
+        </details>
+
+        <details class="mb-2"><summary class="cursor-pointer acc text-sm">▸ Express / Fastify</summary>
+        <pre class="code mt-2">app.use((req, res, next) =&gt; {
+  const email = req.get('X-Auth-Request-Email');
+  if (!email) return res.status(401).end();
+  req.user = {
+    email,
+    sub: req.get('X-Auth-Request-User'),
+    name: req.get('X-Auth-Request-Preferred-Username'),
+  };
+  next();
+});</pre>
+        </details>
+
+        <details class="mb-2"><summary class="cursor-pointer acc text-sm">▸ FastAPI</summary>
+        <pre class="code mt-2">from fastapi import Header, HTTPException, Depends
+
+def get_user(x_auth_request_email: str = Header(None)):
+    if not x_auth_request_email:
+        raise HTTPException(401)
+    return {"email": x_auth_request_email}
+
+@app.get("/me")
+def me(user=Depends(get_user)):
+    return user</pre>
+        </details>
+
+        <details class="mb-2"><summary class="cursor-pointer acc text-sm">▸ Django</summary>
+        <pre class="code mt-2"># settings.py
+MIDDLEWARE = [
+    ...,
+    'django.contrib.auth.middleware.RemoteUserMiddleware',
+]
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.RemoteUserBackend',
+]
+# + 1 middleware nhỏ map X-Auth-Request-Email → REMOTE_USER</pre>
+        </details>
+
+        <details class="mb-2"><summary class="cursor-pointer acc text-sm">▸ Flask</summary>
+        <pre class="code mt-2">@app.before_request
+def authenticate():
+    email = request.headers.get('X-Auth-Request-Email')
+    if not email:
+        abort(401)
+    g.user_email = email</pre>
+        </details>
+
+        <div class="why mt-3">Header được oauth2-proxy inject TRƯỚC khi forward. App tin tưởng header này vì traffic không thể bypass oauth2-proxy (network segmentation + strip-auth-in middleware ở Traefik xoá header attacker gửi vào).</div>
+      </div>
+
+      <!-- Step 6 -->
+      <div class="card2 p-4">
+        <div class="flex items-center gap-2 mb-2"><span class="step-num">6</span><span class="font-semibold">DB schema migration (chỉ nhóm B)</span></div>
+        <pre class="code">-- Backup trước
+ALTER TABLE users RENAME TO users_legacy;   -- giữ forensic 30 ngày
+
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  zitadel_subject TEXT UNIQUE NOT NULL,     -- immutable, bind theo sub
+  name TEXT,
+  created_at TIMESTAMP DEFAULT now()
+);</pre>
+        <p class="text-sm mut mb-2"><strong>Auto-provision khi user login lần đầu:</strong></p>
+        <pre class="code">middleware:
+  email = X-Auth-Request-Email
+  sub = X-Auth-Request-User
+  user = SELECT * FROM users WHERE zitadel_subject = sub
+  if not user:
+      user = INSERT (email, zitadel_subject, name) RETURNING *
+  request.user = user</pre>
+        <div class="why mt-3">Bind theo <code class="inline">zitadel_subject</code> (UUID immutable) thay vì email. Nếu user đổi email trong Zitadel sau này → vẫn match cùng user. Email-based bind = risk tạo user trùng khi đổi email.</div>
+      </div>
+
+    </div>
+
+    <!-- KHÔNG cần làm -->
+    <div class="card2 p-4 mt-6">
+      <div class="h-title mb-2 err">❌ KHÔNG cần làm</div>
+      <ul class="text-sm space-y-1 ml-4 list-disc">
+        <li>KHÔNG cài OIDC library trong app code (passport, next-auth, authlib…)</li>
+        <li>KHÔNG implement OAuth callback handler</li>
+        <li>KHÔNG verify JWT signature</li>
+        <li>KHÔNG quản lý refresh token rotation</li>
+        <li>KHÔNG biết Zitadel tồn tại — app chỉ đọc header</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- WHY THIS PATTERN -->
+  <section id="why" class="card p-6 sect">
+    <div class="h-title mb-3">3 · Vì sao chọn IAP pattern (oauth2-proxy) thay vì OIDC trong app code?</div>
+
+    <table class="k">
+      <thead><tr><th>Tiêu chí</th><th>OIDC trong app code (truyền thống)</th><th>IAP với oauth2-proxy (chọn)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>App dev phải hiểu OIDC?</td>
+          <td>Có — phải biết flow code/PKCE, token refresh, state, nonce</td>
+          <td class="ok">Không — chỉ đọc HTTP header</td>
+        </tr>
+        <tr>
+          <td>LOC change per app</td>
+          <td>200–500 LOC + library mới</td>
+          <td class="ok">15–50 LOC, 0 library</td>
+        </tr>
+        <tr>
+          <td>Implementation bảo mật</td>
+          <td>10 app = 10 implementation = 10 cơ hội sai</td>
+          <td class="ok">1 implementation chuẩn (oauth2-proxy) dùng chung</td>
+        </tr>
+        <tr>
+          <td>Update OIDC library</td>
+          <td>Per app, có thể vỡ</td>
+          <td class="ok">Update 1 chỗ (oauth2-proxy image)</td>
+        </tr>
+        <tr>
+          <td>Cross-language support</td>
+          <td>Cần library cho mọi stack (Streamlit không có)</td>
+          <td class="ok">Header HTTP — universal, mọi stack</td>
+        </tr>
+        <tr>
+          <td>Tách concern</td>
+          <td>Auth + business logic trộn lẫn</td>
+          <td class="ok">Auth ở edge, app chỉ lo business logic</td>
+        </tr>
+        <tr>
+          <td>Migrate khỏi Zitadel sau này</td>
+          <td>Phải sửa code mọi app</td>
+          <td class="ok">Đổi config oauth2-proxy, app không sửa</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="why mt-4">
+      <strong>Trade-off:</strong> Phải maintain thêm component oauth2-proxy + Traefik trên mỗi app-vps. Nhưng cost này 1-time setup, đổi lại app dev không phải đụng OIDC. Với 4–10 app, ROI rõ ràng.
+    </div>
+  </section>
+
+  <!-- TIMELINE -->
+  <section class="card p-6 sect">
+    <div class="h-title mb-3">4 · Effort estimate per app</div>
+    <table class="k">
+      <thead><tr><th>Loại app</th><th>Bước infra</th><th>Bước code</th><th>Tổng wall time</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="pill lime">Nhóm A</span> IP whitelist</td>
+          <td>15 phút (compose + .env + Zitadel app)</td>
+          <td>0 LOC</td>
+          <td class="ok">~15 phút</td>
+        </tr>
+        <tr>
+          <td><span class="pill amber">Shared account</span></td>
+          <td>15 phút</td>
+          <td>~10 LOC (bỏ login form)</td>
+          <td>~30 phút</td>
+        </tr>
+        <tr>
+          <td><span class="pill red">Nhóm B đơn giản</span></td>
+          <td>15 phút</td>
+          <td>~50 LOC + 1 migration</td>
+          <td>~2 giờ</td>
+        </tr>
+        <tr>
+          <td><span class="pill red">Nhóm B phức tạp</span></td>
+          <td>15 phút</td>
+          <td>~150 LOC + multi migration</td>
+          <td>~4 giờ</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- LOGOUT FLOW -->
+  <section class="card p-6 sect">
+    <div class="h-title mb-3">5 · Logout flow</div>
+    <div class="mermaid">
+sequenceDiagram
+  participant B as Browser
+  participant O as oauth2-proxy
+  participant Z as Zitadel
+
+  B->>O: GET /oauth2/sign_out?rd=https://auth.../end_session
+  O->>O: Clear local session cookie
+  O-->>B: 302 redirect Zitadel /oidc/v1/end_session
+  B->>Z: end_session?id_token_hint=...&post_logout_redirect_uri=...
+  Z->>Z: Terminate Zitadel session
+  Z-->>B: 302 redirect post_logout_redirect_uri
+    </div>
+    <div class="why mt-3">2 lớp session: oauth2-proxy cookie + Zitadel session. Logout phải clear cả 2 — nếu chỉ clear oauth2-proxy thì Zitadel session vẫn còn → next access app sẽ silent re-login. Link <code class="inline">/oauth2/sign_out?rd=...</code> handle cả 2 lớp.</div>
+  </section>
+
+  <!-- AI PROMPT -->
+  <section id="ai-prompt" class="card p-6 sect">
+    <div class="h-title mb-3">7 · Prompt cho Claude / AI để tự migrate app</div>
+    <h2 class="text-xl font-semibold mb-2">Member mở Claude Code / Cursor trong repo app → paste prompt → AI tự sửa</h2>
+    <p class="mut text-sm mb-4">Copy prompt phù hợp với nhóm app, điền vài chỗ <code class="inline">{{...}}</code>, paste vào Claude trong workspace app. AI sẽ scan code → đề xuất plan → sửa.</p>
+
+    <!-- Universal prompt -->
+    <div class="card2 p-4 mb-4">
+      <div class="flex items-baseline gap-2 mb-2">
+        <span class="pill cyan">Universal</span>
+        <h3 class="font-semibold acc">Prompt 1 — Scan + Đề xuất plan (chạy TRƯỚC)</h3>
+      </div>
+      <p class="text-sm mut mb-2">Dùng khi chưa biết app thuộc nhóm nào. AI phân tích codebase và recommend approach.</p>
+      <pre class="code">Tôi cần migrate app này sang dùng centralized auth qua Zitadel (pattern IAP — Identity-Aware Proxy với oauth2-proxy sidecar).
+
+Cách hoạt động:
+- oauth2-proxy đặt trước app, handle toàn bộ OIDC flow với Zitadel
+- App KHÔNG cài OIDC library, KHÔNG implement callback
+- App chỉ đọc HTTP header `X-Auth-Request-Email`, `X-Auth-Request-User` (UUID sub),
+  `X-Auth-Request-Preferred-Username` để biết user là ai
+- Logout = link `/oauth2/sign_out`
+
+Reference đầy đủ: https://github.com/&lt;org&gt;/authway/blob/master/mockups/authway-app-migration-guide.html
+
+Yêu cầu:
+1. Scan codebase này, xác định app thuộc nhóm nào:
+   - Nhóm A: IP whitelist only, không có user concept → 0 LOC code change
+   - Nhóm B: có login form + DB users + password_hash → cần bỏ auth + DB migration
+   - Nhóm C: framework không support middleware (Streamlit cũ, Gradio…) → strategy riêng
+   - Shared: 1 account cả team dùng chung → bỏ login form
+2. Liệt kê chính xác các file cần SỬA, XÓA, hoặc THÊM (paths + lý do)
+3. Liệt kê tất cả thư viện/dependency cần GỠ (passport, next-auth, authlib, devise…)
+4. Nếu nhóm B: viết SQL migration cho schema (rename users → users_legacy, thêm zitadel_subject UNIQUE)
+5. Đề xuất middleware/dependency snippet phù hợp stack hiện tại
+6. KHÔNG implement gì cả ở bước này — chỉ trả lời plan dạng checklist
+
+Trả lời ngắn gọn, dùng tiếng Việt cho phần giải thích, code/path bằng tiếng Anh.</pre>
+    </div>
+
+    <!-- Group A prompt -->
+    <div class="card2 p-4 mb-4">
+      <div class="flex items-baseline gap-2 mb-2">
+        <span class="pill lime">Nhóm A / Shared</span>
+        <h3 class="font-semibold ok">Prompt 2A — Bỏ login form, đọc header (≤30 phút)</h3>
+      </div>
+      <pre class="code">App này thuộc Nhóm A/Shared. Migrate sang IAP với oauth2-proxy:
+
+1. Bỏ login form, register, reset password (xóa file routes/components liên quan)
+2. Bỏ session cookie tự quản, bỏ dependency auth (liệt kê + gỡ khỏi package.json/requirements.txt)
+3. Bỏ middleware auth cũ (nếu có), thay bằng middleware đọc header:
+   - `X-Auth-Request-Email` (bắt buộc, nếu missing → 401)
+   - `X-Auth-Request-User` (UUID sub, immutable, dùng làm primary key user)
+   - `X-Auth-Request-Preferred-Username` (display name)
+4. Update logout link/button → `<a href="/oauth2/sign_out">Logout</a>`
+5. Update UI nếu cần show user info: lấy từ header, KHÔNG fetch /api/me phức tạp
+6. Update env vars: bỏ AUTH_SECRET, JWT_SECRET, OAUTH_*, GOOGLE_CLIENT_ID… không còn dùng
+
+KHÔNG được:
+- Cài thư viện OIDC (passport, next-auth, authlib, openidconnect…)
+- Implement OAuth callback handler /oauth2/callback (oauth2-proxy đã làm)
+- Verify JWT signature
+- Quản lý refresh token
+- Đọc header từ client request (chỉ đọc khi container chạy sau Traefik+oauth2-proxy)
+
+Sau khi sửa: chạy build/test để verify không break. Nếu không có test, viết 1 test giả lập header `X-Auth-Request-Email: test@example.com` → route protected trả 200.</pre>
+    </div>
+
+    <!-- Group B prompt -->
+    <div class="card2 p-4 mb-4">
+      <div class="flex items-baseline gap-2 mb-2">
+        <span class="pill red">Nhóm B</span>
+        <h3 class="font-semibold err">Prompt 2B — Full migration (2–4h, có DB)</h3>
+      </div>
+      <pre class="code">App này thuộc Nhóm B (có DB users với password_hash). Migrate sang IAP với oauth2-proxy:
+
+== Code changes ==
+1. Bỏ TẤT CẢ:
+   - Login / register / reset password routes + UI form + email verify flow
+   - Password hashing logic (bcrypt/argon2/scrypt verify + hash)
+   - Session cookie tự quản (express-session, iron-session…)
+   - Dependency: passport, next-auth, devise, django-allauth, authlib, jsonwebtoken… liệt kê hết
+2. Thêm middleware đọc header (~15-30 LOC):
+   - Header `X-Auth-Request-Email` (required → 401 nếu missing)
+   - Header `X-Auth-Request-User` (UUID sub, lưu vào DB)
+   - Header `X-Auth-Request-Preferred-Username` (display name)
+3. Auto-provision: nếu user với `zitadel_subject` chưa tồn tại trong DB → INSERT row mới
+4. Update mọi reference `req.user.id` / `current_user.id` cũ → vẫn dùng internal id từ DB lookup
+5. Logout: link `<a href="/oauth2/sign_out">`
+
+== DB migration ==
+Viết migration file cho framework hiện tại (Prisma/TypeORM/Alembic/Django migrations…):
+
+```sql
+-- Backup forensic: rename thay vì DROP
+ALTER TABLE users RENAME TO users_legacy;
+
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  zitadel_subject TEXT UNIQUE NOT NULL,  -- immutable UUID từ Zitadel sub
+  name TEXT,
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
+);
+
+-- Foreign key tables (posts, orders, etc.) cần chỉnh:
+-- Option 1: chấp nhận data loss (TRUNCATE CASCADE) — đã được approve
+-- Option 2: bảo lưu, mapping thủ công sau khi user re-login
+```
+
+QUAN TRỌNG: KHÔNG bind theo email vì user có thể đổi email trong Zitadel sau này. Bind theo `zitadel_subject` (UUID immutable).
+
+== Verify ==
+- Build/test xong không lỗi compile
+- Test giả lập: set 3 header `X-Auth-Request-*` → request protected route → 200 + user được auto-provision trong DB nếu chưa có
+- Test logout: GET /oauth2/sign_out → status 302 redirect
+
+Trả lời từng bước, hiển thị diff hoặc full file mới khi sửa.</pre>
+    </div>
+
+    <!-- Stack-specific snippet prompts -->
+    <div class="card2 p-4 mb-4">
+      <div class="flex items-baseline gap-2 mb-2">
+        <span class="pill gray">Tuỳ stack</span>
+        <h3 class="font-semibold">Prompt 3 — Thêm context stack-specific (gắn vào Prompt 2)</h3>
+      </div>
+      <p class="text-sm mut mb-2">Thêm 1 trong các đoạn dưới đây vào CUỐI Prompt 2 tuỳ stack:</p>
+
+      <details class="mb-2"><summary class="cursor-pointer acc text-sm">▸ Next.js (App Router)</summary>
+      <pre class="code mt-2">Stack: Next.js App Router, TypeScript.
+- Dùng `headers()` từ `next/headers` trong Server Components
+- Middleware `middleware.ts` ở root: redirect / return 401 nếu thiếu header
+- Server Actions / API routes (`route.ts`): `const email = headers().get('x-auth-request-email')`
+- Client Component muốn dùng user info: pass từ Server Component xuống qua props,
+  hoặc fetch `/api/me` (route.ts đọc header rồi return JSON)
+- Bỏ NextAuth: gỡ `next-auth`, xóa `[...nextauth]/route.ts`, gỡ `SessionProvider`</pre>
+      </details>
+
+      <details class="mb-2"><summary class="cursor-pointer acc text-sm">▸ Express / Fastify</summary>
+      <pre class="code mt-2">Stack: Express (hoặc Fastify), Node.js.
+- Bỏ `passport`, `express-session`, `cookie-parser` (nếu chỉ dùng cho auth)
+- 1 middleware ~15 LOC trước mọi route protected:
+  app.use((req, res, next) => {
+    const email = req.get('X-Auth-Request-Email');
+    if (!email) return res.status(401).end();
+    req.user = { email, sub: req.get('X-Auth-Request-User') };
+    next();
+  });
+- Update tất cả handler dùng `req.user`</pre>
+      </details>
+
+      <details class="mb-2"><summary class="cursor-pointer acc text-sm">▸ FastAPI</summary>
+      <pre class="code mt-2">Stack: FastAPI, Python.
+- Bỏ `python-jose`, `passlib`, `authlib`, `fastapi-users` (nếu có)
+- Dependency:
+  from fastapi import Header, HTTPException, Depends
+  def get_user(x_auth_request_email: str = Header(None),
+               x_auth_request_user: str = Header(None)):
+      if not x_auth_request_email: raise HTTPException(401)
+      return {"email": x_auth_request_email, "sub": x_auth_request_user}
+- Update mọi route: `def route(user=Depends(get_user)):`</pre>
+      </details>
+
+      <details class="mb-2"><summary class="cursor-pointer acc text-sm">▸ Django</summary>
+      <pre class="code mt-2">Stack: Django.
+- Dùng built-in `RemoteUserMiddleware` + `RemoteUserBackend`
+- Custom middleware nhỏ map `HTTP_X_AUTH_REQUEST_EMAIL` → `request.META['REMOTE_USER']`
+- settings.py:
+  MIDDLEWARE = [..., 'myapp.middleware.ZitadelHeaderMiddleware',
+                     'django.contrib.auth.middleware.RemoteUserMiddleware']
+  AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.RemoteUserBackend']
+- Gỡ `django-allauth`, `django-rest-auth`, `djangorestframework-simplejwt`
+- User model: dùng built-in `User`, lưu `zitadel_subject` qua `User.username` hoặc Profile model</pre>
+      </details>
+
+      <details class="mb-2"><summary class="cursor-pointer acc text-sm">▸ Flask</summary>
+      <pre class="code mt-2">Stack: Flask.
+- Gỡ `Flask-Login`, `Flask-Security`, `Authlib`
+- Before-request handler:
+  @app.before_request
+  def authenticate():
+      email = request.headers.get('X-Auth-Request-Email')
+      if not email: abort(401)
+      g.user_email = email
+      g.user_sub = request.headers.get('X-Auth-Request-User')
+- Update mọi nơi dùng `current_user` → `g.user_email`</pre>
+      </details>
+
+      <details class="mb-2"><summary class="cursor-pointer acc text-sm">▸ Streamlit ≥ 1.37</summary>
+      <pre class="code mt-2">Stack: Streamlit (kiểm tra version với `streamlit --version`, phải ≥1.37).
+- Đầu mọi file page:
+  import streamlit as st
+  email = st.context.headers.get('X-Auth-Request-Email')
+  if not email:
+      st.error("Auth required"); st.stop()
+  st.session_state['user_email'] = email
+- Logout button: `st.link_button("Logout", "/oauth2/sign_out")`
+- Nếu Streamlit &lt; 1.37 → upgrade trước, hoặc fallback Nhóm A (oauth2-proxy + IP whitelist, app không biết user)</pre>
+      </details>
+    </div>
+
+    <!-- Infra prompt -->
+    <div class="card2 p-4 mb-4">
+      <div class="flex items-baseline gap-2 mb-2">
+        <span class="pill amber">Infra</span>
+        <h3 class="font-semibold warn">Prompt 4 — Tạo docker-compose + Traefik + oauth2-proxy</h3>
+      </div>
+      <p class="text-sm mut mb-2">Sau khi app code đã migrate, chạy prompt này để AI tạo infra. Cần điền 4 thông tin từ Zitadel admin console.</p>
+      <pre class="code">Tạo file `docker-compose.yml` + `traefik.yml` + `.env.example` cho app này deploy lên VPS riêng, theo pattern IAP với oauth2-proxy + Traefik.
+
+Thông tin app:
+- App hostname: {{app.company.com}}
+- App image / Dockerfile: {{ghcr.io/team/myapp:latest hoặc ./Dockerfile}}
+- App listening port (trong container): {{3000}}
+- Zitadel issuer URL: {{https://auth.company.com}}
+- Zitadel hostname: {{auth.company.com}}
+- Zitadel VPS IP (để extra_hosts nếu lab self-signed): {{192.168.x.x}}
+
+Yêu cầu:
+1. `docker-compose.yml` với 3 service:
+   - traefik (v3.4) — port 80/443, TLS, route Host(`{{app.company.com}}`)
+   - oauth2-proxy (v7.7.1) — provider=oidc, client từ env, set-xauthrequest=true,
+     pass-access-token=false, cookie-refresh=1h, upstream=app container
+   - app — KHÔNG có traefik labels (chỉ reachable qua oauth2-proxy)
+2. `.env.example` với:
+   - APP_HOSTNAME, ZITADEL_HOSTNAME, ZITADEL_ISSUER_URL, ZITADEL_IP
+   - APP_CLIENT_ID (lấy từ Zitadel console), APP_CLIENT_SECRET, APP_COOKIE_SECRET (32 chars)
+3. `traefik.yml` static config: entrypoints, providers docker
+4. README.md ngắn ghi 5 bước deploy:
+   - Tạo OIDC app trên Zitadel console, copy client_id + secret
+   - Fill .env
+   - Generate cookie secret: `openssl rand -base64 32 | tr -d '/+=' | cut -c1-32`
+   - Thêm `192.168.x.x auth.company.com` vào /etc/hosts (nếu lab)
+   - `docker compose up -d`
+
+Reference template chuẩn: https://github.com/&lt;org&gt;/authway/blob/master/infra/app-vps/docker-compose.yml
+
+KHÔNG dùng pass-access-token=true (leak token xuống app). Dùng `--ssl-insecure-skip-verify=true` CHỈ nếu Zitadel cert là self-signed (lab); production thì bỏ flag này.</pre>
+    </div>
+
+    <div class="why">
+      <strong>Workflow đề xuất cho member:</strong>
+      <ol class="list-decimal ml-5 mt-2 space-y-1 text-sm">
+        <li>Mở Claude Code / Cursor / Continue trong workspace app</li>
+        <li>Paste <strong>Prompt 1</strong> → AI scan, classify nhóm, đưa plan</li>
+        <li>Đọc plan, confirm hoặc điều chỉnh</li>
+        <li>Paste <strong>Prompt 2A hoặc 2B</strong> + đoạn <strong>Prompt 3</strong> tương ứng stack → AI sửa code</li>
+        <li>Review diff, commit branch <code class="inline">migrate/zitadel-iap</code></li>
+        <li>Paste <strong>Prompt 4</strong> để AI tạo infra files</li>
+        <li>Tạo OIDC app trên Zitadel console, fill <code class="inline">.env</code>, deploy</li>
+        <li>Test e2e + report lại auth admin</li>
+      </ol>
+    </div>
+
+    <div class="danger mt-3">
+      <strong>Kiểm tra sau khi AI sửa:</strong> human review BẮT BUỘC, không merge blind. Đặc biệt check: (1) không còn route public chấp nhận password, (2) không còn endpoint nào skip middleware, (3) DB migration không drop data nhầm, (4) không hardcode header trust khi test local mà quên gỡ.
+    </div>
+  </section>
+
+  <!-- TEMPLATE LINKS -->
+  <section class="card p-6 sect">
+    <div class="h-title mb-3">8 · Template & Reference</div>
+    <div class="grid md:grid-cols-2 gap-3">
+      <a href="../infra/auth-vps/docker-compose.yml" class="card2 p-3 block hover:border-cyan-400">
+        <div class="font-semibold acc text-sm">infra/auth-vps/docker-compose.yml</div>
+        <div class="mut text-xs">Stack Zitadel + Postgres + Traefik + Mailhog</div>
+      </a>
+      <a href="../infra/app-vps/docker-compose.yml" class="card2 p-3 block hover:border-emerald-400">
+        <div class="font-semibold ok text-sm">infra/app-vps/docker-compose.yml</div>
+        <div class="mut text-xs">Template Traefik + oauth2-proxy + sample app</div>
+      </a>
+      <a href="../sample-apps/nextjs-iap-demo/" class="card2 p-3 block hover:border-emerald-400">
+        <div class="font-semibold ok text-sm">sample-apps/nextjs-iap-demo/</div>
+        <div class="mut text-xs">Next.js đọc header — clone làm template</div>
+      </a>
+      <a href="../sample-apps/static-iap-demo/" class="card2 p-3 block hover:border-emerald-400">
+        <div class="font-semibold ok text-sm">sample-apps/static-iap-demo/</div>
+        <div class="mut text-xs">Static HTML fetch /oauth2/userinfo</div>
+      </a>
+      <a href="../docs/lab-deploy-192-168-122-54.md" class="card2 p-3 block hover:border-violet-400">
+        <div class="font-semibold vio text-sm">docs/lab-deploy-192-168-122-54.md</div>
+        <div class="mut text-xs">Step-by-step deploy 2 VPS lab</div>
+      </a>
+      <a href="../plans/reports/brainstorm-260626-1328-legacy-app-migration.md" class="card2 p-3 block hover:border-violet-400">
+        <div class="font-semibold vio text-sm">brainstorm-legacy-app-migration.md</div>
+        <div class="mut text-xs">Pattern Nhóm A vs B + cutover playbook</div>
+      </a>
+    </div>
+  </section>
+
+  <footer class="mut text-xs text-center py-6">
+    Authway · App Migration Guide · Generated 2026-06-29 · Theme follows authway-system-explainer.html
+  </footer>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      background: '#0a0a0b',
+      primaryColor: '#15151a',
+      primaryBorderColor: '#1f1f25',
+      primaryTextColor: '#ededf0',
+      lineColor: '#8a8a96',
+      fontFamily: 'Inter, ui-sans-serif, system-ui',
+    },
+    flowchart: { curve: 'basis', padding: 12 },
+    sequence: { mirrorActors: false, useMaxWidth: true },
+  });
+</script>
+</body>
+</html>

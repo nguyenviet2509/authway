@@ -1,0 +1,84 @@
+name: authway-app
+
+# Authway App IAP Template — 1 app + oauth2-proxy + Traefik
+# Copy folder này lên VPS, fill .env, docker compose up -d
+# Reference: ../infra/app-vps/docker-compose.yml (lab demo cho 2 app)
+
+networks:
+  # internal: app container chỉ reachable từ oauth2-proxy. KHÔNG expose ra edge.
+  internal:
+    driver: bridge
+  edge:
+    driver: bridge
+
+volumes:
+  traefik-acme:
+  traefik-logs:
+
+services:
+  # ── Traefik (sole ingress) ───────────────────────────────
+  traefik:
+    image: traefik:v3.4
+    restart: unless-stopped
+    networks: [edge]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:8088:8080"   # dashboard local-only
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./dynamic:/etc/traefik/dynamic:ro
+      - ./tls:/etc/traefik/tls:ro
+      - traefik-acme:/acme
+      - traefik-logs:/var/log/traefik
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # ── oauth2-proxy (IAP layer) ─────────────────────────────
+  # Handle toàn bộ OIDC flow với Zitadel. App downstream chỉ đọc header.
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+    restart: unless-stopped
+    networks: [edge, internal]
+    command:
+      - --http-address=0.0.0.0:4180
+      - --provider=oidc
+      - --oidc-issuer-url=${ZITADEL_ISSUER_URL}
+      - --client-id=${APP_CLIENT_ID}
+      - --client-secret=${APP_CLIENT_SECRET}
+      - --redirect-url=https://${APP_HOSTNAME}/oauth2/callback
+      - --cookie-secret=${APP_COOKIE_SECRET}
+      - --cookie-domain=${APP_HOSTNAME}
+      - --cookie-secure=true
+      - --cookie-refresh=1h               # revoke propagate <1h
+      - --whitelist-domain=${ZITADEL_HOSTNAME}   # cho phép logout rd về Zitadel
+      - --reverse-proxy=true
+      - --set-xauthrequest=true           # inject X-Auth-Request-* xuống app
+      - --pass-access-token=false         # KHÔNG leak token xuống app
+      - --pass-authorization-header=false
+      - --email-domain=*
+      - --skip-provider-button=true
+      - --upstream=http://app:${APP_PORT}
+      - --ssl-insecure-skip-verify=true   # LAB ONLY: Zitadel cert self-signed. PRODUCTION → xoá flag này
+    # Lab: container không thấy /etc/hosts của host. Map ZITADEL_HOSTNAME → IP nếu cần.
+    # Production có DNS thật → xoá block extra_hosts.
+    extra_hosts:
+      - "${ZITADEL_HOSTNAME}:${ZITADEL_IP:-127.0.0.1}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=authway-app_edge"
+      - "traefik.http.routers.app.rule=Host(`${APP_HOSTNAME}`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      - "traefik.http.routers.app.tls=true"
+      - "traefik.http.services.app.loadbalancer.server.port=4180"
+
+  # ── App container (internal only) ────────────────────────
+  # KHÔNG có Traefik label → chỉ reachable từ oauth2-proxy qua internal network.
+  # Member sửa image / build context theo app của mình.
+  app:
+    image: ${APP_IMAGE}
+    restart: unless-stopped
+    networks: [internal]
+    # build:                       # uncomment nếu build local thay vì pull image
+    #   context: ./app-src
+    # environment:                 # app env vars riêng nếu có
+    #   DATABASE_URL: ...

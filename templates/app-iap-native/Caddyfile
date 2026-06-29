@@ -1,0 +1,57 @@
+# Authway App IAP — Caddy reverse proxy
+# Replace `myapp.company.com` và email LE notification
+# Reload: sudo systemctl reload caddy
+
+{
+    # Email cho Let's Encrypt notification (expire warning)
+    email ops@company.com
+
+    # Bỏ admin endpoint mặc định (security)
+    admin off
+}
+
+myapp.company.com {
+    # ─── Strip X-Auth-* từ client (chống header spoof) ───
+    # Phải đứng TRƯỚC reverse_proxy để Caddy strip trước khi forward.
+    request_header -X-Auth-Request-Email
+    request_header -X-Auth-Request-User
+    request_header -X-Auth-Request-Preferred-Username
+    request_header -X-Auth-Request-Groups
+    request_header -X-Forwarded-User
+
+    # ─── Security headers ───
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+        # Bỏ Server header để không expose Caddy version
+        -Server
+    }
+
+    # ─── Forward all → oauth2-proxy ───
+    # oauth2-proxy tự xử lý /oauth2/* (callback, sign_out, userinfo, auth)
+    # và forward các path khác xuống upstream app (config trong oauth2-proxy).
+    reverse_proxy 127.0.0.1:4180 {
+        header_up Host                {host}
+        header_up X-Real-IP           {remote_host}
+        header_up X-Forwarded-For     {remote_host}
+        header_up X-Forwarded-Proto   {scheme}
+    }
+
+    # ─── Logs ───
+    log {
+        output file /var/log/caddy/myapp.access.log {
+            roll_size 100mb
+            roll_keep 10
+        }
+        format json
+    }
+}
+
+# ─── Optional: deny direct IP access ───
+# Chống attacker scan IP rồi access bypass domain.
+:443 {
+    abort
+}

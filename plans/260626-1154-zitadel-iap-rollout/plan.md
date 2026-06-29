@@ -5,6 +5,7 @@ status: pending
 mode: sequential
 brainstorm: ../reports/brainstorm-260626-1154-zitadel-iap-rollout.md
 supersedes: ../260626-1103-auth-gateway-poc/plan.md
+blocks: [260626-1808-production-hardening-1vps-fallback]
 ---
 
 # Zitadel IAP Rollout Plan

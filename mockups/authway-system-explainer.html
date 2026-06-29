@@ -79,14 +79,15 @@
       <h1 class="text-2xl font-semibold mt-2">Một "auth brain" duy nhất cho 5 devs — login 1 lần, vào mọi internal tool, có MFA + audit log.</h1>
       <p class="mut mt-3 text-sm leading-relaxed max-w-[780px]">
         Authway tập trung identity của team vào <b class="acc">Zitadel</b> self-host (1 VPS).
-        Mỗi app vibe-code chạy trên VPS riêng có <b class="acc">oauth2-proxy</b> sidecar.
-        Dev/admin gõ URL app → bị redirect tới <code>auth.authway.lab</code> → login với <b>local user + MFA Passkey</b> →
-        callback set cookie SSO → app load với header <code>X-Auth-Request-Email</code> nói "Hello {email}".
-        Defense in depth: IP whitelist subnet 192.168.122.0/24 + VPN <b>vẫn giữ</b>, Zitadel chỉ là layer identity.
+        Mỗi app vibe-code chạy trên VPS riêng có <b class="acc">oauth2-proxy</b> làm sole proxy.
+        Dev/admin gõ URL app → oauth2-proxy redirect tới <code>auth.lab.local</code> → login local user + MFA →
+        callback set cookie (per-app, exact host) → oauth2-proxy proxy upstream với header <code>X-Auth-Request-Email</code>.
+        SSO cross-app qua <b>Zitadel session</b> (redirect flash, không re-MFA).
+        Defense in depth: IP whitelist subnet + VPN giữ song song; Zitadel chỉ là layer identity.
       </p>
       <div class="flex flex-wrap gap-2 mt-4 text-xs">
         <span class="chip on">🔐 Zitadel OIDC (AGPL self-host)</span>
-        <span class="chip on">🪪 Passkey + TOTP enforced</span>
+        <span class="chip on">🪪 MFA enforced (TOTP lab · Passkey prod)</span>
         <span class="chip on">🛡️ IP whitelist + VPN defense in depth</span>
         <span class="chip on">📑 Event-sourced audit log</span>
         <span class="chip on">🚪 1-click offboarding</span>
@@ -120,7 +121,7 @@
 flowchart LR
   subgraph FW["🛡️ Firewall · IP whitelist 192.168.122.0/24 + VPN"]
   end
-  subgraph AUTH["auth-server · 192.168.122.54 (docker compose)"]
+  subgraph AUTH["auth-vps · 192.168.122.54 (docker compose)"]
     TA["traefik<br/>80 · 443 (tls internal)"]
     Z["zitadel :8080<br/>OIDC issuer + admin UI"]
     PGA[("postgres :5432<br/>users · sessions · audit")]
@@ -146,7 +147,7 @@ flowchart LR
   TB --> A1
   TC --> OP2
   TC --> A2
-  OP -. "OIDC discovery + token<br/>https://auth.authway.lab" .-> TA
+  OP -. "OIDC discovery + token<br/>https://auth.lab.local" .-> TA
   OP2 -. "OIDC discovery + token" .-> TA
       </div>
       <div class="legend mt-4 text-[11px] mut flex flex-wrap gap-4">
@@ -167,10 +168,10 @@ flowchart LR
           <tr><th>Service</th><th>VPS</th><th>Cổng</th><th>Vai trò</th><th>Vì sao chọn</th></tr>
         </thead>
         <tbody>
-          <tr><td><span class="pill cyan">traefik</span></td><td>auth + apps</td><td>80 · 443</td><td>Edge proxy, TLS, IP whitelist middleware, forwardAuth chain</td><td>Docker label-driven, dynamic config; middleware chain tốt cho IAP</td></tr>
-          <tr><td><span class="pill vio">zitadel</span></td><td>auth-server</td><td>8080 (sau traefik)</td><td>OIDC issuer, local user store, MFA policy, audit event-sourced</td><td>Self-host AGPL, certified OIDC, passkey native, multi-app project hierarchy</td></tr>
-          <tr><td><span class="pill gray">postgres</span></td><td>auth-server</td><td>5432 (local)</td><td>Persistence cho Zitadel: users, sessions, events, projects</td><td>Zitadel chỉ support Postgres; SQL chuẩn, dump dễ backup</td></tr>
-          <tr><td><span class="pill lime">oauth2-proxy</span></td><td>mỗi app-vps</td><td>4180 (local)</td><td>OIDC client sidecar: login redirect, cookie session, inject X-Auth-* headers</td><td>Battle-tested, hỗ trợ generic OIDC, đồng nhất cho mọi app</td></tr>
+          <tr><td><span class="pill cyan">traefik v3.4</span></td><td>auth + apps</td><td>80 · 443</td><td>Edge proxy, TLS, entrypoint-level strip-auth-in + security headers</td><td>Docker label-driven, entrypoint middleware apply mọi router (chống template drift)</td></tr>
+          <tr><td><span class="pill vio">zitadel v2.66</span></td><td>auth-vps</td><td>8080 (sau traefik, h2c)</td><td>OIDC issuer, local user store, MFA policy, audit event-sourced</td><td>Self-host AGPL, certified OIDC, passkey native, multi-app project hierarchy</td></tr>
+          <tr><td><span class="pill gray">postgres 16</span></td><td>auth-vps</td><td>5432 (local)</td><td>Persistence cho Zitadel: users, sessions, events, projects</td><td>Zitadel chỉ support Postgres; SQL chuẩn, dump dễ backup</td></tr>
+          <tr><td><span class="pill lime">oauth2-proxy v7.7</span></td><td>mỗi app-vps</td><td>4180 (sole proxy)</td><td>OIDC client + reverse proxy: login flow + cookie + inject X-Auth-* + proxy upstream</td><td>Battle-tested. POC dùng làm sole proxy (không forwardAuth) — login flow + upstream gọn trong 1 instance</td></tr>
           <tr><td><span class="pill gray">app downstream</span></td><td>app-vps</td><td>tùy app</td><td>Vibe-code app — Next.js / static HTML / Streamlit. Đọc <code>X-Auth-Request-Email</code> để xác user</td><td>Mọi app cùng pattern; code change &lt;5 LOC</td></tr>
           <tr><td colspan="5" class="mut text-[11px]"><span class="pill amber">deferred / out of POC</span> &nbsp;Tailscale / VPN (giả định đã có) · HA Zitadel replica · managed Postgres · Prometheus monitoring · Terraform Zitadel provider</td></tr>
         </tbody>
@@ -186,47 +187,50 @@ flowchart LR
         <div class="mermaid">
 sequenceDiagram
   autonumber
-  participant U as Browser (dev)
+  participant U as Browser
   participant TA as traefik (app-vps)
-  participant OP as oauth2-proxy
-  participant TZ as traefik (auth-server)
+  participant OP as oauth2-proxy (sole proxy)
+  participant TZ as traefik (auth-vps)
   participant Z as zitadel
-  participant A as app downstream
-  U->>TA: GET https://app.authway.lab/
-  TA->>TA: strip-auth-in (xoá X-Auth-* từ client)
-  TA->>OP: forwardAuth /oauth2/auth
-  OP-->>TA: 401 (no cookie)
-  TA-->>U: 302 /oauth2/start?rd=...
+  participant A as app upstream (internal)
+  U->>TA: GET https://nextjs-demo.lab.local/
+  TA->>TA: entrypoint middleware: strip X-Auth-* (chống spoof)
+  TA->>OP: forward request to oauth2-proxy:4180
+  OP->>OP: check cookie → none
+  OP-->>U: 302 /oauth2/start?rd=/
   U->>OP: GET /oauth2/start
-  OP-->>U: 302 https://auth.authway.lab/authorize?client_id=...
-  U->>TZ: GET /authorize
+  OP-->>U: 302 https://auth.lab.local/oauth/v2/authorize?client_id=...
+  U->>TZ: GET /oauth/v2/authorize
   TZ->>Z: forward
   Z-->>U: login form
   U->>Z: username + password
-  Z-->>U: MFA prompt (Passkey/TOTP)
-  U->>Z: WebAuthn assertion / OTP
-  Z-->>U: 302 callback?code=...
+  Z-->>U: MFA prompt (TOTP cho lab / Passkey cho prod)
+  U->>Z: OTP code / WebAuthn assertion
+  Z-->>U: 302 https://nextjs-demo.lab.local/oauth2/callback?code=...
   U->>OP: GET /oauth2/callback?code=...
-  OP->>TZ: token exchange (code → access/id token)
+  OP->>TZ: token exchange (code → tokens) via Basic auth
   TZ->>Z: forward
-  Z-->>OP: tokens
-  OP->>OP: validate, set cookie (.authway.lab)
-  OP-->>U: 302 / (original)
-  U->>TA: GET / (with cookie)
-  TA->>OP: forwardAuth /oauth2/auth
-  OP-->>TA: 202 + headers X-Auth-Request-Email, ...
-  TA->>A: forward + headers
-  A-->>U: HTML "Hello user@authway.lab"
+  Z-->>OP: id_token + refresh_token
+  OP->>OP: validate, set cookie (Domain=nextjs-demo.lab.local, exact host)
+  OP-->>U: 302 / (original rd)
+  U->>OP: GET / (with cookie)
+  OP->>OP: cookie valid → proxy upstream + inject X-Auth-Request-*
+  OP->>A: GET / + X-Auth-Request-Email=...
+  A-->>OP: HTML "Hello user@lab.local"
+  OP-->>U: HTML
         </div>
       </div>
       <div class="card p-5 text-sm leading-relaxed">
         <div class="h-title">Highlights</div>
         <ul class="mt-3 space-y-2.5">
-          <li>• <b>Strip trước khi forwardAuth:</b> middleware <code>strip-auth-in</code> CHẠY TRƯỚC <code>iap-auth</code> để xoá header X-Auth-* mà client gửi vào → chống spoof.</li>
-          <li>• <b>Cookie scope <code>.authway.lab</code></b>: leading dot → SSO giữa các subdomain (app A login xong, app B vào thẳng).</li>
-          <li>• <b>MFA bắt buộc trong Zitadel</b>, không phải oauth2-proxy. Policy enforced server-side → không bypass được.</li>
-          <li>• <b>Token chỉ ở oauth2-proxy</b>, app không thấy access_token (set <code>--pass-access-token=false</code>) — giảm blast radius nếu app bị XSS.</li>
-          <li>• <b>Lab tls internal</b> + <code>--ssl-insecure-skip-verify=true</code> → production phải gỡ.</li>
+          <li>• <b>oauth2-proxy là sole proxy</b>, không dùng Traefik forwardAuth (errors-redirect pattern không trigger 302 đúng). oauth2-proxy tự handle login flow + proxy upstream.</li>
+          <li>• <b>Strip X-Auth-* ở entrypoint Traefik</b> (declared trong <code>traefik.yml</code> websecure middlewares) — apply MỌI router, không phụ thuộc label per-app.</li>
+          <li>• <b>Cookie scope per-app</b> (Domain = exact app hostname). Không share cross-app vì public-suffix list chặn `.lab.local`/`.io.vn`.</li>
+          <li>• <b>SSO qua Zitadel session</b> (redirect flash, không re-MFA) — không phải cookie-share. Xem section 4.</li>
+          <li>• <b>MFA enforced trong Zitadel</b>, policy server-side → không bypass được.</li>
+          <li>• <b>Lab</b>: TOTP (self-signed cert block WebAuthn). <b>Production</b>: Passkey + TOTP.</li>
+          <li>• <b>Token chỉ ở oauth2-proxy</b>, app không thấy access_token (<code>--pass-access-token=false</code>).</li>
+          <li>• <b>Lab</b>: <code>--ssl-insecure-skip-verify=true</code> (Zitadel self-signed). Production: gỡ.</li>
         </ul>
       </div>
     </div>
@@ -240,40 +244,44 @@ sequenceDiagram
 sequenceDiagram
   autonumber
   participant U as Browser
-  participant A as app A
-  participant B as app B
   participant OPA as oauth2-proxy A
   participant OPB as oauth2-proxy B
   participant Z as zitadel
-  Note over U,Z: SSO — login 1 lần, dùng nhiều app
-  U->>A: GET app-a.authway.lab/ (already logged in)
-  A-->>U: render OK
-  U->>B: GET app-b.authway.lab/
-  B->>OPB: forwardAuth
-  OPB->>OPB: check cookie .authway.lab → có
-  OPB-->>B: 202 + X-Auth-* headers
-  B-->>U: render OK (không login lại)
+  Note over U,Z: SSO mechanism — Zitadel session reuse (KHÔNG share cookie)
+  U->>OPA: GET nextjs-demo.lab.local/ (logged in, cookie A valid)
+  OPA-->>U: render OK
+  U->>OPB: GET static-demo.lab.local/ (no cookie B yet)
+  OPB-->>U: 302 /oauth2/start → authorize endpoint
+  U->>Z: GET /oauth/v2/authorize (mang Zitadel session cookie)
+  Z->>Z: Zitadel session valid → skip login + MFA
+  Z-->>U: 302 callback?code=... (redirect flash, không có UI)
+  U->>OPB: GET /oauth2/callback?code=...
+  OPB->>Z: token exchange
+  Z-->>OPB: tokens
+  OPB->>OPB: set cookie B (Domain=static-demo.lab.local, EXACT host)
+  OPB-->>U: render OK
+  Note over U,Z: User chỉ thấy redirect flash — không phải re-MFA
 
-  Note over U,Z: Logout — chấm dứt session ở mọi layer
-  U->>OPA: GET /oauth2/sign_out?rd=https://auth.authway.lab/oidc/v1/end_session
-  OPA->>OPA: clear cookie
+  Note over U,Z: Logout — sign_out + Zitadel end_session
+  U->>OPA: GET /oauth2/sign_out?rd=https://auth.lab.local/oidc/v1/end_session
+  OPA->>OPA: clear cookie A
   OPA-->>U: 302 zitadel end_session
-  U->>Z: GET /oidc/v1/end_session
+  U->>Z: GET /oidc/v1/end_session (id_token_hint)
   Z->>Z: revoke session, audit log
   Z-->>U: 302 post_logout_redirect
       </div>
       <div class="grid grid-cols-3 gap-3 mt-5 text-sm">
         <div class="card2 p-4">
-          <div class="h-title">SSO scope</div>
-          <p class="mut mt-2">Cookie domain <code>.authway.lab</code> → mọi subdomain cùng parent thấy chung. App khác domain phải login lại (intentional isolation).</p>
+          <div class="h-title">SSO mechanism</div>
+          <p class="mut mt-2">Cookie domain = exact app hostname (per-app, không share). SSO qua Zitadel session — redirect flash, không re-MFA. Áp dụng kể cả app khác parent domain.</p>
         </div>
         <div class="card2 p-4">
           <div class="h-title">Session TTL</div>
-          <p class="mut mt-2">oauth2-proxy cookie 168h (default) · Zitadel session policy override → set ngắn (4–8h) cho admin app, dài cho daily tool.</p>
+          <p class="mut mt-2">oauth2-proxy cookie 168h default + <code>--cookie-refresh=1h</code> → revoke propagate &lt;1h. Zitadel session policy override per-app nếu cần.</p>
         </div>
         <div class="card2 p-4">
           <div class="h-title">Force logout</div>
-          <p class="mut mt-2">Admin disable user trong Zitadel → token introspection fail → oauth2-proxy refresh fail → app force re-login trong &lt; 1 cookie cycle.</p>
+          <p class="mut mt-2">Admin disable user trong Zitadel → cookie-refresh fail → app force re-login trong &lt;1h. Override ngay: tear-down oauth2-proxy + restart.</p>
         </div>
       </div>
     </div>
@@ -305,15 +313,15 @@ sequenceDiagram
     <div class="card p-5 mt-3">
       <div class="mermaid">
 flowchart TB
-  A[["Dev có app mới muốn deploy"]] --> B[Admin Zitadel: tạo OIDC Application<br/>note client_id + client_secret]
-  B --> C[Dev: git clone template repo<br/>cp .env.example .env]
-  C --> D[Fill 3 env: APP_HOSTNAME, CLIENT_ID, CLIENT_SECRET]
+  A[["Dev có app mới muốn deploy"]] --> B["Admin Zitadel: tạo OIDC App<br/>Auth Method=Basic + Refresh Token ON<br/>Redirect URI = https://APP/oauth2/callback"]
+  B --> C[Dev: git clone template<br/>cp .env.example .env]
+  C --> D["Fill env: APP_HOSTNAME, CLIENT_ID, CLIENT_SECRET<br/>+ generate COOKIE_SECRET 32 chars<br/>+ ZITADEL_IP (cho extra_hosts)"]
   D --> E[Replace placeholder app/ bằng code thật]
-  E --> F["docker compose up -d"]
-  F --> G[Verify: vào URL → redirect Zitadel → login MFA → callback → app load]
-  G --> H{Header X-Auth-* propagate OK?}
-  H -- "Có" --> I[Smoke test header spoof:<br/>curl -H X-Auth-Request-Email:fake → bị strip]
-  H -- "Không" --> J[Check middleware chain order:<br/>strip-auth-in BEFORE iap-auth]
+  E --> F["docker compose up -d --build"]
+  F --> G[Verify: vào URL → redirect Zitadel → MFA → callback → app load]
+  G --> H{Header X-Auth-* OK?}
+  H -- "Có" --> I[Smoke test spoof:<br/>curl -H X-Auth-Request-Email:fake<br/>→ vẫn redirect login, header bị strip]
+  H -- "Không" --> J["Check: oauth2-proxy logs<br/>+ Traefik routers list<br/>+ env values không có inline comment"]
   J --> G
   I --> K[(Update docs/runbooks/&lt;app&gt;.md)]
       </div>
@@ -343,7 +351,7 @@ flowchart TB
 <pre class="mt-3 card2 p-3 text-[12px] overflow-auto">{
   "id": "289734...",      // immutable subject
   "username": "vietnt",
-  "email": "vietnt@authway.lab",
+  "email": "vietnt@inet.vn",
   "state": "ACTIVE",
   "auth_factors": [
     {"type": "PASSKEY", "name": "MacBook"},
@@ -391,7 +399,7 @@ flowchart TB
           <tr><td>1. Network</td><td>IP whitelist subnet 192.168.122.0/24 + VPN</td><td>Attacker ngoài mạng không reach được URL login</td></tr>
           <tr><td>2. Identity</td><td>Zitadel local user + MFA Passkey/TOTP enforced</td><td>Password leak vẫn cần MFA → không vào được</td></tr>
           <tr><td>3. Authorization</td><td>App-level role (lưu trong DB app local), assignment thủ công</td><td>Vào được system cũng chỉ làm phần được grant</td></tr>
-          <tr><td>4. Cookie isolation</td><td>cookie-domain <code>.authway.lab</code>, secure, http-only</td><td>XSS không steal được cookie HTTP-only</td></tr>
+          <tr><td>4. Cookie isolation</td><td>cookie-domain = exact app hostname, secure, http-only, per-app secret</td><td>XSS không steal cookie HTTP-only. Compromise app A không leak session app B.</td></tr>
           <tr><td>5. Header strip</td><td>Traefik middleware <code>strip-auth-in</code> xoá <code>X-Auth-*</code> incoming</td><td>Client không spoof identity được</td></tr>
           <tr><td>6. Token isolation</td><td><code>--pass-access-token=false</code> — app không thấy access_token</td><td>XSS app không exfil token được</td></tr>
           <tr><td>7. Audit</td><td>Zitadel event-sourced log: login, MFA, grant change, password change</td><td>Forensic truy AI làm GÌ LÚC NÀO</td></tr>

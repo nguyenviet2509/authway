@@ -1,0 +1,36 @@
+[Unit]
+Description=oauth2-proxy (Authway IAP)
+Documentation=https://oauth2-proxy.github.io/oauth2-proxy/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/oauth2-proxy --config=/etc/oauth2-proxy/config.cfg
+Restart=on-failure
+RestartSec=5
+
+# Run as dynamic non-root user (no shell, no home, isolated)
+DynamicUser=yes
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Read-only config
+ReadOnlyPaths=/etc/oauth2-proxy
+
+[Install]
+WantedBy=multi-user.target

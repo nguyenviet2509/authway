@@ -1,0 +1,50 @@
+# Dynamic middlewares — app IAP template
+# 2 middlewares attached globally tại entrypoint websecure (xem traefik.yml)
+
+http:
+  middlewares:
+    # ─── strip-auth-in ──────────────────────────────────────
+    # Strip X-Auth-* từ client request để chống spoof.
+    # oauth2-proxy sẽ inject lại từ session sau khi verify.
+    strip-auth-in:
+      headers:
+        customRequestHeaders:
+          X-Auth-Request-Email: ""
+          X-Auth-Request-User: ""
+          X-Auth-Request-Preferred-Username: ""
+          X-Auth-Request-Groups: ""
+          X-Forwarded-User: ""
+
+    # ─── security-headers ───────────────────────────────────
+    # HSTS + frame-deny + CSP strict (chống XSS cho vibe-code app)
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: strict-origin-when-cross-origin
+        # CSP strict default. App nào cần CDN external phải override per-router.
+        customResponseHeaders:
+          Content-Security-Policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
+
+    # ─── ipwhitelist (OPTIONAL) ────────────────────────────
+    # Defense in depth: chỉ allow VPN subnet truy cập app.
+    # Uncomment + thêm vào router middleware chain nếu cần.
+    # ipwhitelist:
+    #   ipAllowList:
+    #     sourceRange:
+    #       - 10.8.0.0/24       # OpenVPN subnet
+    #       - 192.168.122.0/24  # LAN office
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+
+  # ─── Lab: self-signed cert mount từ tls/ ────────────────
+  # Production: dùng Let's Encrypt resolver (xem traefik.yml) thay vì certificates block.
+  certificates:
+    - certFile: /etc/traefik/tls/app.crt
+      keyFile: /etc/traefik/tls/app.key

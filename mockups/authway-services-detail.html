@@ -53,6 +53,15 @@
   .files td:first-child{width:38%;color:#cdd2d8}
   .files td code{font-size:11.5px;color:#d6f5b0}
   .files td:last-child{color:#a8b5b8;line-height:1.5}
+  .purpose{background:linear-gradient(180deg,#14110a,#0e0e12);border:1px solid #2a2208;border-radius:10px;padding:12px 14px;margin-top:12px}
+  .purpose h4{font-size:11px;text-transform:uppercase;letter-spacing:.16em;color:var(--warn);margin:0 0 8px;display:flex;align-items:center;gap:8px}
+  .purpose .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  @media (max-width:1024px){.purpose .grid3{grid-template-columns:1fr}}
+  .purpose .b{background:#100d05;border:1px solid #2a1f06;border-radius:8px;padding:10px 11px}
+  .purpose .b .t{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#d39e3f}
+  .purpose .b .x{font-size:12.5px;margin-top:5px;color:#e8d9b5;line-height:1.55}
+  .purpose .lead{font-size:13px;color:#e8d9b5;line-height:1.6;margin:0 0 10px}
+  .purpose .lead b{color:#fbbf24}
   .svc-nav{position:fixed;top:16px;right:16px;width:44px;max-height:calc(100vh - 32px);overflow:hidden;z-index:50;padding:6px;transition:width .2s ease}
   .svc-nav:hover{width:240px;overflow-y:auto}
   .svc-nav::-webkit-scrollbar{width:6px}
@@ -80,7 +89,7 @@
       </div>
     </div>
     <div class="flex items-center gap-2 text-xs">
-      <span class="chip on">infra/auth-server + infra/app-vps-template</span>
+      <span class="chip on">infra/auth-vps + infra/app-vps</span>
       <span class="chip"><span class="dot" style="background:var(--ok)"></span> 2026-06-26</span>
     </div>
   </header>
@@ -88,7 +97,7 @@
   <!-- FLOATING SERVICE NAV -->
   <nav class="svc-nav card">
     <div class="h-title px-2 mb-1">Services</div>
-    <a href="#traefik-auth"><span class="ico">①</span><span class="lbl">traefik (auth-server)</span></a>
+    <a href="#traefik-auth"><span class="ico">①</span><span class="lbl">traefik (auth-vps)</span></a>
     <a href="#zitadel"><span class="ico">②</span><span class="lbl">zitadel</span></a>
     <a href="#postgres"><span class="ico">③</span><span class="lbl">postgres</span></a>
     <a href="#traefik-app"><span class="ico">④</span><span class="lbl">traefik (app-vps)</span></a>
@@ -105,15 +114,16 @@
       <div class="h-title">Stack overview</div>
       <p class="mut mt-2 text-sm leading-relaxed">
         Authway tách thành 2 stack docker-compose độc lập:
-        <b>auth-server stack</b> (Traefik + Zitadel + Postgres) chạy 1 VPS duy nhất tại <code>192.168.122.54</code>,
-        và <b>app-vps stack template</b> (Traefik + oauth2-proxy + app) clone deploy trên mỗi VPS app khác.
-        Tất cả service tuân middleware chain <b>strip-auth-in → iap-auth → app</b> để chống header spoofing.
+        <b>auth-vps stack</b> (Traefik + Zitadel + Postgres + Mailhog) chạy 1 VPS duy nhất tại <code>192.168.122.54</code>,
+        và <b>app-vps stack</b> (Traefik + N oauth2-proxy + N app) clone deploy trên mỗi VPS app khác (lab: <code>192.168.122.55</code>).
+        Header spoof chống ở <b>entrypoint-level middleware</b> Traefik (strip X-Auth-*) — apply mọi router, không cần lặp per-app.
+        oauth2-proxy đóng vai <b>sole proxy</b> cho từng app: tự handle login flow + cookie + proxy upstream nội bộ.
       </p>
       <div class="flex flex-wrap gap-2 mt-4 text-xs">
-        <span class="chip on">Auth-server: 3 service</span>
-        <span class="chip on">App-vps template: 3+ service</span>
+        <span class="chip on">auth-vps: 4 service</span>
+        <span class="chip on">app-vps: 5 service (cho 2 demo app)</span>
         <span class="chip on">Network: bridge per stack</span>
-        <span class="chip on">TLS: tls internal (lab)</span>
+        <span class="chip on">TLS: self-signed (lab) · ACME (prod)</span>
       </div>
     </div>
   </section>
@@ -125,12 +135,22 @@
     <div class="card p-5">
       <div class="svc-header">
         <div>
-          <h3 class="text-lg font-semibold"><span class="num">①</span>traefik <span class="pill cyan ml-1">edge · auth-server</span></h3>
-          <p class="mut text-[12px] mt-1">Edge proxy cho auth.authway.lab — TLS termination, IP whitelist middleware, routing tới Zitadel</p>
+          <h3 class="text-lg font-semibold"><span class="num">①</span>traefik <span class="pill cyan ml-1">edge · auth-vps</span></h3>
+          <p class="mut text-[12px] mt-1">Edge proxy cho auth.lab.local — TLS termination, IP whitelist middleware, routing tới Zitadel</p>
         </div>
         <div class="flex gap-2">
-          <span class="badge">image: traefik:v3.2</span>
+          <span class="badge">image: traefik:v3.4</span>
           <span class="badge">ports: 80, 443</span>
+        </div>
+      </div>
+
+      <div class="purpose">
+        <h4>⚡ Tác dụng — vì sao tồn tại</h4>
+        <p class="lead">Là <b>cửa duy nhất</b> internet/intranet chạm Zitadel. Mọi request HTTPS → terminate TLS ở đây → forward h2c tới Zitadel. Nếu thiếu Traefik: Zitadel phải tự handle TLS (phức tạp cert renewal), không lọc được IP, không strip header spoof từ client.</p>
+        <div class="grid3">
+          <div class="b"><div class="t">Giá trị 1 · Single edge</div><div class="x">Tất cả traffic tới <code>auth.lab.local</code> đi qua 1 chỗ → 1 nơi để log, rate-limit, audit. Không có Traefik = Zitadel expose trực tiếp internet.</div></div>
+          <div class="b"><div class="t">Giá trị 2 · Defense layer</div><div class="x">IP whitelist + security-headers + (sau này) rate-limit. Tách concern: Zitadel lo identity, Traefik lo network/edge security.</div></div>
+          <div class="b"><div class="t">Giá trị 3 · TLS automation</div><div class="x">ACME auto-renew Let's Encrypt khi prod. Cert resolver internal cho lab tự ký. App không cần biết về cert.</div></div>
         </div>
       </div>
 
@@ -138,7 +158,7 @@
         <h4>Vai trò</h4>
         <div class="grid4">
           <div class="b"><div class="t">TLS</div><div class="x">Cert resolver <code>internal</code> (self-signed lab) / Let's Encrypt prod</div></div>
-          <div class="b"><div class="t">Routing</div><div class="x">Host <code>auth.authway.lab</code> → service Zitadel :8080</div></div>
+          <div class="b"><div class="t">Routing</div><div class="x">Host <code>auth.lab.local</code> → service Zitadel :8080</div></div>
           <div class="b"><div class="t">Middleware</div><div class="x"><code>ipwhitelist</code> subnet 192.168.122.0/24 + security-headers</div></div>
           <div class="b"><div class="t">Discovery</div><div class="x">Docker provider — pick up label trên service zitadel</div></div>
         </div>
@@ -152,8 +172,8 @@
       <div class="files">
         <h4>Files</h4>
         <table>
-          <tr><td>Compose</td><td><code>infra/auth-server/docker-compose.yml</code></td><td>Service <code>traefik</code> với command flags, labels chỉ trên service khác</td></tr>
-          <tr><td>Dynamic config</td><td><code>infra/auth-server/traefik/dynamic/middlewares.yml</code></td><td>Định nghĩa middleware <code>ipwhitelist</code>, <code>security-headers</code></td></tr>
+          <tr><td>Compose</td><td><code>infra/auth-vps/docker-compose.yml</code></td><td>Service <code>traefik</code> với command flags, labels chỉ trên service khác</td></tr>
+          <tr><td>Dynamic config</td><td><code>infra/auth-vps/traefik/dynamic/middlewares.yml</code></td><td>Định nghĩa middleware <code>ipwhitelist</code>, <code>security-headers</code></td></tr>
           <tr><td>Volume mount</td><td><code>/var/run/docker.sock:/var/run/docker.sock:ro</code></td><td>Read-only docker socket — auto-discover service mới</td></tr>
         </table>
       </div>
@@ -171,6 +191,16 @@
         <div class="flex gap-2">
           <span class="badge">image: ghcr.io/zitadel/zitadel:v2.66</span>
           <span class="badge">internal port: 8080</span>
+        </div>
+      </div>
+
+      <div class="purpose">
+        <h4>⚡ Tác dụng — vì sao tồn tại</h4>
+        <p class="lead"><b>Trái tim hệ thống</b> — nơi duy nhất biết "user là ai, đăng nhập được không, có MFA chưa". Toàn bộ apps không tự lưu password — đẩy hết cho Zitadel. Nếu thiếu Zitadel: mỗi app tự build login/MFA/passkey/audit → vibe-coder không kham nổi, lockdown rời rạc, không SSO.</p>
+        <div class="grid3">
+          <div class="b"><div class="t">Giá trị 1 · Single source of truth</div><div class="x">1 user record dùng cho tất cả apps. Disable user 1 lần → mất quyền mọi nơi trong &lt;1h (cookie refresh). Không có Zitadel = N database user phải đồng bộ tay.</div></div>
+          <div class="b"><div class="t">Giá trị 2 · MFA + Passkey grade</div><div class="x">Passkey/TOTP enforce policy-level. App downstream không cần biết MFA tồn tại — Zitadel chặn ở login. Loại bỏ password-only attack surface toàn cụm.</div></div>
+          <div class="b"><div class="t">Giá trị 3 · Audit trail bất biến</div><div class="x">Event-sourced → mọi login, mọi grant, mọi password reset đều có dấu vết append-only. Forensic được "ai làm gì lúc nào" mà không cần build log system riêng.</div></div>
         </div>
       </div>
 
@@ -193,8 +223,8 @@
       <div class="files">
         <h4>Files · env</h4>
         <table>
-          <tr><td>Compose</td><td><code>infra/auth-server/docker-compose.yml</code></td><td>Service <code>zitadel</code> + labels Traefik router</td></tr>
-          <tr><td>Env</td><td><code>infra/auth-server/.env</code></td><td>ZITADEL_MASTERKEY, EXTERNAL*, POSTGRES_*, FIRSTINSTANCE_*</td></tr>
+          <tr><td>Compose</td><td><code>infra/auth-vps/docker-compose.yml</code></td><td>Service <code>zitadel</code> + labels Traefik router</td></tr>
+          <tr><td>Env</td><td><code>infra/auth-vps/.env</code></td><td>ZITADEL_MASTERKEY, EXTERNAL*, POSTGRES_*, FIRSTINSTANCE_*</td></tr>
           <tr><td>Postgres connection</td><td>env block trong compose</td><td>DATABASE_POSTGRES_HOST=postgres, USER + ADMIN credentials</td></tr>
           <tr><td>Traefik label</td><td>compose label</td><td><code>traefik.http.services.zitadel.loadbalancer.server.scheme=h2c</code> (h2 cleartext)</td></tr>
         </table>
@@ -213,6 +243,16 @@
         <div class="flex gap-2">
           <span class="badge">image: postgres:16-alpine</span>
           <span class="badge">port: 5432 (local only)</span>
+        </div>
+      </div>
+
+      <div class="purpose">
+        <h4>⚡ Tác dụng — vì sao tồn tại</h4>
+        <p class="lead"><b>Bộ nhớ persistent</b> cho Zitadel. Zitadel stateless — restart không mất gì vì state nằm hết ở đây: users, hashed password, MFA enrollment, project/app config, OIDC client secret, mọi audit event. Mất Postgres = mất TOÀN BỘ identity store.</p>
+        <div class="grid3">
+          <div class="b"><div class="t">Giá trị 1 · Single durable store</div><div class="x">1 dump = backup nguyên hệ thống auth (không có "config nằm rải rác file YAML"). Restore 1 lệnh = khôi phục full state.</div></div>
+          <div class="b"><div class="t">Giá trị 2 · Event store append-only</div><div class="x">Audit events bất biến — không UPDATE/DELETE. Replay event = tái dựng state bất kỳ thời điểm (forensic, debug "ai đã sửa policy hôm 15/3").</div></div>
+          <div class="b"><div class="t">Giá trị 3 · Critical SPOF · cần plan HA</div><div class="x">Đây là điểm rủi ro lớn nhất. POC chấp nhận single-node. Production: managed Postgres (Cloud SQL/RDS) với PITR + replica + automated backup.</div></div>
         </div>
       </div>
 
@@ -235,8 +275,8 @@
       <div class="files">
         <h4>Files</h4>
         <table>
-          <tr><td>Compose service</td><td><code>infra/auth-server/docker-compose.yml</code></td><td>POSTGRES_USER/PASSWORD/DB từ env</td></tr>
-          <tr><td>Backup script</td><td><code>infra/auth-server/scripts/backup-postgres.sh</code></td><td>pg_dump + retention 30 ngày, chạy 02:00 daily via cron</td></tr>
+          <tr><td>Compose service</td><td><code>infra/auth-vps/docker-compose.yml</code></td><td>POSTGRES_USER/PASSWORD/DB từ env</td></tr>
+          <tr><td>Backup script</td><td><code>infra/auth-vps/scripts/backup-postgres.sh</code></td><td>pg_dump + retention 30 ngày, chạy 02:00 daily via cron</td></tr>
           <tr><td>Restore</td><td><code>pg_restore -U zitadel -d zitadel --clean --if-exists &lt; dump</code></td><td>Phải stop Zitadel trước, vì foreign key + event consistency</td></tr>
         </table>
       </div>
@@ -249,34 +289,46 @@
       <div class="svc-header">
         <div>
           <h3 class="text-lg font-semibold"><span class="num">④</span>traefik <span class="pill cyan ml-1">edge · app-vps</span></h3>
-          <p class="mut text-[12px] mt-1">Mỗi app-vps có 1 Traefik riêng. Khác auth-server: middleware chain <code>strip-auth-in → iap-auth → app</code></p>
+          <p class="mut text-[12px] mt-1">Mỗi app-vps có 1 Traefik riêng. Routes thẳng host → oauth2-proxy:4180 (oauth2-proxy là sole proxy, tự handle auth + upstream)</p>
         </div>
         <div class="flex gap-2">
-          <span class="badge">image: traefik:v3.2</span>
+          <span class="badge">image: traefik:v3.4</span>
           <span class="badge">ports: 80, 443</span>
         </div>
       </div>
 
+      <div class="purpose">
+        <h4>⚡ Tác dụng — vì sao tồn tại (khác Traefik auth-vps)</h4>
+        <p class="lead"><b>Edge cho mỗi VPS app</b> + nơi <b>chặn header spoof</b>. Khác với Traefik auth-vps: nó không route tới app trực tiếp — luôn forward sang oauth2-proxy. Nếu thiếu Traefik app-vps: app phải tự expose 443, tự strip header, tự cert. Vibe-coder không làm nổi đồng đều.</p>
+        <div class="grid3">
+          <div class="b"><div class="t">Giá trị 1 · Strip X-Auth-* incoming</div><div class="x">Middleware <code>strip-auth-in</code> ở entrypoint level → mọi request từ client BỊ XOÁ header <code>X-Auth-*</code> trước khi tới oauth2-proxy. Chống attacker giả header để bypass auth.</div></div>
+          <div class="b"><div class="t">Giá trị 2 · TLS + routing đồng nhất</div><div class="x">1 template Traefik cho mọi app-vps — vibe-coder copy compose, đổi env, app live. Không phải nghĩ về cert, redirect, CSP.</div></div>
+          <div class="b"><div class="t">Giá trị 3 · Tách concern</div><div class="x">Traefik lo "đưa request vào đúng oauth2-proxy"; oauth2-proxy lo "user đã auth chưa"; app lo "logic nghiệp vụ". 3 lớp rõ ràng, fail-mode khoanh vùng được.</div></div>
+        </div>
+      </div>
+
       <div class="role">
-        <h4>Middleware chain (CRITICAL — đúng thứ tự)</h4>
+        <h4>Routing pattern (oauth2-proxy = sole proxy)</h4>
         <div class="grid4">
-          <div class="b"><div class="t">1. strip-auth-in</div><div class="x">Xoá X-Auth-Request-* từ client request → chống spoof</div></div>
-          <div class="b"><div class="t">2. iap-auth</div><div class="x">forwardAuth tới oauth2-proxy → 401 redirect, 202 + headers</div></div>
-          <div class="b"><div class="t">3. (optional) ipwhitelist</div><div class="x">Defense in depth — subnet whitelist</div></div>
-          <div class="b"><div class="t">4. → app</div><div class="x">App nhận request kèm X-Auth-Request-Email từ iap-auth</div></div>
+          <div class="b"><div class="t">Entrypoint middleware</div><div class="x"><code>strip-auth-in</code> + <code>security-headers</code> apply MỌI router → chống spoof không phụ thuộc per-router config</div></div>
+          <div class="b"><div class="t">Router rule</div><div class="x"><code>Host(APP_HOSTNAME)</code> → service <code>oauth2-proxy-&lt;app&gt;:4180</code></div></div>
+          <div class="b"><div class="t">Upstream</div><div class="x">oauth2-proxy có <code>--upstream=http://&lt;app&gt;:&lt;port&gt;</code>, internal docker network</div></div>
+          <div class="b"><div class="t">App container</div><div class="x">KHÔNG có Traefik label — chỉ reachable qua oauth2-proxy internal</div></div>
         </div>
         <ul class="mt-3">
-          <li><b>Sai thứ tự = security hole.</b> Nếu <code>iap-auth</code> chạy trước <code>strip-auth-in</code>, header spoof từ client sẽ truyền tới app.</li>
-          <li>Route <code>Host=${APP_HOSTNAME} &amp;&amp; PathPrefix=/oauth2/</code> dẫn về oauth2-proxy (không qua middleware chain) — login flow cần bypass</li>
+          <li><b>Pattern đổi:</b> POC ban đầu thử forwardAuth + errors-redirect (Traefik route app trực tiếp), nhưng errors middleware không trigger 302 đúng. Đổi sang oauth2-proxy làm sole proxy.</li>
+          <li>oauth2-proxy tự xử login flow: chưa auth → 302 <code>/oauth2/start</code> → Zitadel → callback → set cookie → proxy upstream với X-Auth-* headers.</li>
+          <li>Strip middleware ở entrypoint level (declared trong <code>traefik.yml</code>) — apply mọi router, không cần lặp lại per-app.</li>
         </ul>
       </div>
 
       <div class="files">
         <h4>Files</h4>
         <table>
-          <tr><td>Compose</td><td><code>infra/app-vps-template/docker-compose.yml</code></td><td>Traefik + oauth2-proxy + app</td></tr>
-          <tr><td>Middleware</td><td><code>infra/app-vps-template/traefik/dynamic/middlewares.yml</code></td><td><code>strip-auth-in</code>, <code>iap-auth</code> (forwardAuth)</td></tr>
-          <tr><td>Label chain</td><td>compose label app</td><td><code>traefik.http.routers.app.middlewares=strip-auth-in@file,iap-auth@file</code></td></tr>
+          <tr><td>Compose</td><td><code>infra/app-vps/docker-compose.yml</code></td><td>Traefik + 2 oauth2-proxy + 2 app, mỗi app pair có OIDC client + cookie secret riêng</td></tr>
+          <tr><td>Traefik static</td><td><code>infra/app-vps/traefik.yml</code></td><td>entrypoint <code>websecure.middlewares: [strip-auth-in, security-headers]</code></td></tr>
+          <tr><td>Dynamic middleware</td><td><code>infra/app-vps/dynamic/middlewares.yml</code></td><td><code>strip-auth-in</code>, <code>security-headers</code> với CSP strict</td></tr>
+          <tr><td>Label per app</td><td>compose label oauth2-proxy</td><td><code>traefik.http.routers.&lt;app&gt;.rule=Host(...)</code> → service oauth2-proxy port 4180</td></tr>
         </table>
       </div>
     </div>
@@ -288,7 +340,7 @@
       <div class="svc-header">
         <div>
           <h3 class="text-lg font-semibold"><span class="num">⑤</span>oauth2-proxy <span class="pill lime ml-1">OIDC client · cookie · header inject</span></h3>
-          <p class="mut text-[12px] mt-1">Sidecar trên mỗi app-vps. Authenticate user qua Zitadel OIDC, set cookie SSO, inject X-Auth-* headers cho upstream</p>
+          <p class="mut text-[12px] mt-1">Sole proxy trên mỗi app-vps. Mỗi app = 1 instance riêng (1 OIDC client + 1 cookie secret). KHÔNG share cookie cross-app (public-suffix safe).</p>
         </div>
         <div class="flex gap-2">
           <span class="badge">image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1</span>
@@ -296,29 +348,42 @@
         </div>
       </div>
 
+      <div class="purpose">
+        <h4>⚡ Tác dụng — vì sao tồn tại (component LÕI của IAP pattern)</h4>
+        <p class="lead"><b>"OIDC translator"</b> — biến app zero-auth thành app có auth mà không sửa code. Tự handle login flow, cookie, refresh token, inject header. App downstream chỉ đọc <code>X-Auth-Request-Email</code> = 1 dòng code. Nếu thiếu oauth2-proxy: mỗi app phải tự code OIDC client (PKCE, callback, cookie, refresh, MFA flow) — static HTML thì BẤT KHẢ THI.</p>
+        <div class="grid3">
+          <div class="b"><div class="t">Giá trị 1 · App không biết OIDC tồn tại</div><div class="x">Static HTML, Streamlit, FastAPI demo — không cần SDK Zitadel, không cần lib OIDC. Vibe-coder ship app mới &lt;15 phút.</div></div>
+          <div class="b"><div class="t">Giá trị 2 · Per-app isolation</div><div class="x">Mỗi app có instance riêng = OIDC client riêng = cookie domain exact host riêng. App A bị XSS không leo sang app B (cookie không share). Revoke 1 app = 1 client_secret, không ảnh hưởng app khác.</div></div>
+          <div class="b"><div class="t">Giá trị 3 · Token isolation</div><div class="x"><code>--pass-access-token=false</code> → app KHÔNG cầm access_token. App bị XSS không exfil token được. <code>--cookie-refresh=1h</code> → disable user trong Zitadel mất quyền &lt;1h tự động.</div></div>
+        </div>
+      </div>
+
       <div class="role">
         <h4>Vai trò</h4>
         <div class="grid4">
-          <div class="b"><div class="t">OIDC client</div><div class="x"><code>--provider=oidc</code> + issuer URL Zitadel</div></div>
-          <div class="b"><div class="t">Cookie</div><div class="x">cookie-domain <code>.authway.lab</code> → SSO subdomain</div></div>
-          <div class="b"><div class="t">Forward auth endpoint</div><div class="x"><code>/oauth2/auth</code> — Traefik gọi check session</div></div>
-          <div class="b"><div class="t">Header inject</div><div class="x"><code>--set-xauthrequest=true</code> → X-Auth-Request-Email + User + Preferred-Username</div></div>
+          <div class="b"><div class="t">OIDC client</div><div class="x"><code>--provider=oidc</code> + issuer URL Zitadel, Auth Method <b>Basic</b> (client_secret) + Refresh Token</div></div>
+          <div class="b"><div class="t">Cookie (per-app)</div><div class="x">cookie-domain = <b>exact app hostname</b> (không phải parent — public suffix có thể chặn). Mỗi app cookie độc lập.</div></div>
+          <div class="b"><div class="t">SSO mechanism</div><div class="x">SSO qua <b>Zitadel session</b> (redirect flash, no MFA re-prompt), KHÔNG qua cookie share.</div></div>
+          <div class="b"><div class="t">Header inject</div><div class="x"><code>--set-xauthrequest=true</code> → X-Auth-Request-Email + User + Preferred-Username vào upstream</div></div>
         </div>
         <ul class="mt-3">
           <li><code>--pass-access-token=false</code> — app KHÔNG nhận access_token (giảm XSS exfil risk)</li>
-          <li><code>--ssl-insecure-skip-verify=true</code> CHỈ cho lab (Zitadel tls internal). Production: gỡ.</li>
+          <li><code>--cookie-refresh=1h</code> — revoke user trong Zitadel propagate &lt;1h (red-team #10)</li>
+          <li><code>--whitelist-domain=auth.lab.local</code> — cho phép logout <code>rd</code> chain về Zitadel <code>end_session</code></li>
+          <li><code>--ssl-insecure-skip-verify=true</code> CHỈ cho lab (Zitadel self-signed). Production: gỡ.</li>
           <li><code>--skip-provider-button=true</code> — không hiện màn hình chọn provider, redirect thẳng Zitadel</li>
-          <li><code>COOKIE_SECRET</code> phải là <code>openssl rand -base64 32</code> — generate riêng mỗi app</li>
-          <li>Route mount <code>Host && PathPrefix(/oauth2/)</code> để handle <code>/oauth2/start</code>, <code>/callback</code>, <code>/sign_out</code></li>
+          <li><code>extra_hosts</code> trong compose map <code>auth.lab.local</code> → IP auth VPS (container DNS không thấy /etc/hosts host)</li>
+          <li>Cookie secret: <code>openssl rand -base64 32 | tr -d '/+=' | cut -c1-32</code> (đúng 32 chars) — generate riêng mỗi app</li>
         </ul>
       </div>
 
       <div class="files">
-        <h4>Files</h4>
+        <h4>Files · config notes</h4>
         <table>
-          <tr><td>Compose service</td><td><code>infra/app-vps-template/docker-compose.yml</code></td><td>Command flags trực tiếp trong compose</td></tr>
-          <tr><td>Env</td><td><code>.env</code></td><td>ZITADEL_CLIENT_ID, ZITADEL_CLIENT_SECRET, COOKIE_SECRET, APP_HOSTNAME</td></tr>
-          <tr><td>Traefik label</td><td>compose label</td><td>Route <code>Host(APP_HOSTNAME) && PathPrefix(/oauth2/)</code> bypass middleware chain</td></tr>
+          <tr><td>Compose service</td><td><code>infra/app-vps/docker-compose.yml</code></td><td>2 service <code>oauth2-proxy-nextjs</code> + <code>oauth2-proxy-static</code>, command flags trực tiếp</td></tr>
+          <tr><td>Env</td><td><code>infra/app-vps/.env</code></td><td>{APP}_CLIENT_ID, {APP}_CLIENT_SECRET, {APP}_COOKIE_SECRET, {APP}_HOSTNAME, ZITADEL_IP</td></tr>
+          <tr><td>Traefik label</td><td>compose label oauth2-proxy</td><td>Router <code>Host(APP_HOSTNAME)</code> → service oauth2-proxy port 4180 (xử ALL paths, không tách <code>/oauth2/</code>)</td></tr>
+          <tr><td>Zitadel app config</td><td>Console UI</td><td>Auth Method = <b>Basic</b>, Refresh Token = ON, Redirect URI = <code>https://&lt;app&gt;/oauth2/callback</code></td></tr>
         </table>
       </div>
     </div>
@@ -335,6 +400,16 @@
         <div class="flex gap-2">
           <span class="badge">image: tùy app</span>
           <span class="badge">port: tùy</span>
+        </div>
+      </div>
+
+      <div class="purpose">
+        <h4>⚡ Tác dụng — vì sao tồn tại (consumer của toàn bộ stack)</h4>
+        <p class="lead"><b>Đích cuối</b> của mọi request — nơi business logic chạy. Hợp đồng cực đơn giản: <b>"Tin header <code>X-Auth-Request-Email</code>, đừng tự làm auth"</b>. App không lưu password, không có trang login, không quản session. Stack auth toàn bộ là "vô hình" với app code — đây chính là giá trị KISS của IAP pattern.</p>
+        <div class="grid3">
+          <div class="b"><div class="t">Giá trị 1 · Migration cost cực thấp</div><div class="x">Nhóm A (IP whitelist only): 0 LOC. Nhóm B (app tự auth): bỏ login/password + middleware đọc header = 50-150 LOC. So với tự tích OIDC SDK: 500+ LOC + maintain.</div></div>
+          <div class="b"><div class="t">Giá trị 2 · Polyglot friendly</div><div class="x">Next.js, FastAPI, Streamlit, static HTML, Grafana, pgAdmin — tất cả đều "đọc header" được. Không bị khoá stack/ngôn ngữ. Vibe-code bằng tool nào cũng dán vào được.</div></div>
+          <div class="b"><div class="t">Giá trị 3 · FK ổn định qua subject ID</div><div class="x">Lưu <code>zitadel_subject</code> (UUID stable) làm FK thay vì email. User đổi email = data không vỡ. Đây là lý do bắt buộc đọc <code>X-Auth-Request-User</code> chứ không chỉ email.</div></div>
         </div>
       </div>
 
@@ -375,6 +450,17 @@
           <p class="mut text-[12px] mt-1">Postgres dump daily 02:00 → <code>/opt/authway/backup/zitadel-YYYYMMDD-HHMM.dump</code></p>
         </div>
       </div>
+
+      <div class="purpose">
+        <h4>⚡ Tác dụng — vì sao tồn tại</h4>
+        <p class="lead"><b>Bảo hiểm phá sản</b>. Postgres = SPOF chứa toàn bộ users + audit + config. Mất disk = mất hết identity → mọi app cluster mất quyền truy cập. Backup daily + restore test = phòng tuyến cuối khi disk fail, ransomware, hoặc operator xoá nhầm.</p>
+        <div class="grid3">
+          <div class="b"><div class="t">Giá trị 1 · RPO 24h chấp nhận được</div><div class="x">Internal tool, &lt;1k user — mất 1 ngày event log OK. Production critical thì cần WAL streaming (RPO &lt;1min) — nâng cấp khi cần.</div></div>
+          <div class="b"><div class="t">Giá trị 2 · Restore test = backup thật</div><div class="x">Backup không restore được = không có backup. Monthly restore test vào staging → verify integrity + đo restore time (RTO baseline).</div></div>
+          <div class="b"><div class="t">Giá trị 3 · Offsite chống ransomware</div><div class="x">Production phải ship sang NAS / S3 / MinIO khác VPS. Local backup cùng disk = vô nghĩa khi disk hỏng cả 2 file.</div></div>
+        </div>
+      </div>
+
       <div class="role">
         <h4>Lưu ý</h4>
         <ul class="mt-3">
@@ -387,7 +473,7 @@
       <div class="files">
         <h4>Files</h4>
         <table>
-          <tr><td>Script</td><td><code>infra/auth-server/scripts/backup-postgres.sh</code></td><td>pg_dump + cleanup + log</td></tr>
+          <tr><td>Script</td><td><code>infra/auth-vps/scripts/backup-postgres.sh</code></td><td>pg_dump + cleanup + log</td></tr>
           <tr><td>Cron</td><td><code>crontab -u authops</code></td><td><code>0 2 * * * /opt/authway/.../backup-postgres.sh</code></td></tr>
           <tr><td>Destination</td><td><code>/opt/authway/backup/</code></td><td>Owner authops:authops, mode 0750</td></tr>
         </table>
@@ -404,6 +490,17 @@
           <p class="mut text-[12px] mt-1">Đảm bảo stack tự up sau reboot VPS</p>
         </div>
       </div>
+
+      <div class="purpose">
+        <h4>⚡ Tác dụng — vì sao tồn tại</h4>
+        <p class="lead"><b>Tự phục hồi sau reboot</b>. VPS kernel update / power loss / migrate host → docker daemon up nhưng compose stack KHÔNG tự up. Không có systemd unit = sau reboot, admin phải SSH chạy <code>docker compose up</code> tay → downtime kéo dài + dễ quên.</p>
+        <div class="grid3">
+          <div class="b"><div class="t">Giá trị 1 · Zero-touch boot</div><div class="x">Reboot xong, Zitadel up automatic trong 30-60s. Không cần on-call ngồi chờ SSH.</div></div>
+          <div class="b"><div class="t">Giá trị 2 · Standard ops interface</div><div class="x"><code>systemctl status/start/stop authway</code> — interface chuẩn ops biết. Không cần training thêm "compose dir nằm đâu".</div></div>
+          <div class="b"><div class="t">Giá trị 3 · Dependency ordering</div><div class="x"><code>After=docker.service network-online.target</code> → đảm bảo network + docker ready trước khi start. Tránh race condition khiến container không bind port được.</div></div>
+        </div>
+      </div>
+
       <div class="role">
         <h4>Unit file</h4>
         <pre class="card2 p-3 mt-2 text-[12px] overflow-auto">[Unit]
@@ -414,7 +511,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/authway/infra/auth-server
+WorkingDirectory=/opt/authway/infra/auth-vps
 ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose down
 User=authops

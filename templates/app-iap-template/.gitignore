@@ -1,0 +1,10 @@
+# Secrets — fill local, không commit
+.env
+
+# TLS keys & certs — không commit
+tls/*.key
+tls/*.crt
+tls/*.pem
+
+# Local state
+*.log

@@ -37,8 +37,10 @@ entryPoints:
     http:
       tls: {}
       # Entrypoint-level middleware: applies to MỌI router (red-team #2)
-      # security-headers áp dụng cho mọi response (HSTS, X-Frame-Options...)
+      # Thứ tự chain: IP whitelist chặn trước → security-headers áp response còn lại
+      # ipallowlist-internal: 6 IP cố định, còn lại → 403 (tương đương nginx allow/deny all)
       middlewares:
+        - ipallowlist-internal@file
         - security-headers@file
 
 providers:

@@ -57,6 +57,9 @@ services:
       - --skip-provider-button=true
       - --upstream=http://nextjs-demo:3000
       - --ssl-insecure-skip-verify=true   # LAB ONLY: Zitadel cert self-signed
+      - --custom-templates-dir=/templates  # auto-recover trang 500 khi code bị replay
+    volumes:
+      - ./templates:/templates:ro
     extra_hosts:
       # Lab: container không thấy /etc/hosts host. Map ZITADEL_HOSTNAME → IP của auth VPS.
       - "${ZITADEL_HOSTNAME}:${ZITADEL_IP}"
@@ -101,6 +104,9 @@ services:
       - --skip-provider-button=true
       - --upstream=http://static-demo:80
       - --ssl-insecure-skip-verify=true
+      - --custom-templates-dir=/templates
+    volumes:
+      - ./templates:/templates:ro
     extra_hosts:
       - "${ZITADEL_HOSTNAME}:${ZITADEL_IP}"
     labels:

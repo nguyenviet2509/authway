@@ -4,6 +4,22 @@
 
 http:
   middlewares:
+    # IP allow list — chỉ 5 IP văn phòng + localhost được vào, còn lại 403
+    # Tương đương nginx "allow <ip>; deny all;" — Traefik ipAllowList = whitelist mặc định deny phần còn lại
+    ipallowlist-internal:
+      ipAllowList:
+        sourceRange:
+          - "123.25.21.12/32"
+          - "172.31.98.188/32"
+          - "115.73.218.192/32"
+          - "103.57.222.245/32"
+          - "118.70.127.171/32"
+          - "127.0.0.1/32"
+        # ipStrategy.depth=0 (default): dùng RemoteAddr connection thật
+        # Nếu sau này đứng sau Cloudflare/LB → đổi sang depth=1 để lấy IP client từ X-Forwarded-For
+        ipStrategy:
+          depth: 0
+
     # Rate-limit Zitadel login/authorize paths (red-team #14)
     ratelimit-auth:
       rateLimit:
