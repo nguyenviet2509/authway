@@ -10,7 +10,6 @@ networks:
 
 volumes:
   postgres-data:
-  zitadel-data:
   # v4: shared bootstrap dir — setup tạo login-client PAT, login sidecar đọc
   zitadel-bootstrap:
   traefik-acme:
@@ -88,9 +87,7 @@ services:
       ZITADEL_EXTERNALDOMAIN: ${ZITADEL_EXTERNAL_DOMAIN}
       ZITADEL_EXTERNALPORT: 443
       ZITADEL_EXTERNALSECURE: "true"
-      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${ZITADEL_ADMIN_USERNAME}
-      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD}
-      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "true"
+      # First instance org + human admin được khai báo trong zitadel-steps.yaml (single source)
       # v4 Login V2: service-user PAT cho login sidecar gọi zitadel API
       ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /zitadel/bootstrap/login-client.pat
       ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
@@ -101,7 +98,7 @@ services:
       ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: https://${ZITADEL_EXTERNAL_DOMAIN}/ui/v2/login/
     volumes:
       - ./zitadel-config.runtime.yaml:/zitadel-config.yaml:ro
-      - ./zitadel-steps.yaml:/zitadel-steps.yaml:ro
+      - ./zitadel-steps.runtime.yaml:/zitadel-steps.yaml:ro
       - zitadel-bootstrap:/zitadel/bootstrap:rw
     depends_on:
       zitadel-init:
@@ -139,7 +136,6 @@ services:
       ZITADEL_SAML_DEFAULTLOGINURLV2: https://${ZITADEL_EXTERNAL_DOMAIN}/ui/v2/login/login?samlRequest=
     volumes:
       - ./zitadel-config.runtime.yaml:/zitadel-config.yaml:ro
-      - zitadel-data:/data
     depends_on:
       zitadel-setup:
         condition: service_completed_successfully

@@ -98,7 +98,8 @@
   <nav class="svc-nav card">
     <div class="h-title px-2 mb-1">Services</div>
     <a href="#traefik-auth"><span class="ico">①</span><span class="lbl">traefik (auth-vps)</span></a>
-    <a href="#zitadel"><span class="ico">②</span><span class="lbl">zitadel</span></a>
+    <a href="#zitadel"><span class="ico">②</span><span class="lbl">zitadel (api)</span></a>
+    <a href="#zitadel-login"><span class="ico">②b</span><span class="lbl">zitadel-login (Login V2)</span></a>
     <a href="#postgres"><span class="ico">③</span><span class="lbl">postgres</span></a>
     <a href="#traefik-app"><span class="ico">④</span><span class="lbl">traefik (app-vps)</span></a>
     <a href="#oauth2-proxy"><span class="ico">⑤</span><span class="lbl">oauth2-proxy</span></a>
@@ -204,19 +205,33 @@
         </div>
       </div>
 
+      <div class="purpose" style="margin-top:14px">
+        <h4>🔐 Cơ chế auth — 4 lớp</h4>
+        <div class="grid4">
+          <div class="b"><div class="t">1 · Protocol</div><div class="x"><b>OIDC 1.0</b> (chính, certified) + OAuth 2.1 + PKCE. SAML 2.0 cho legacy. App talk Zitadel qua <code>/oauth/v2/authorize</code> + <code>/oauth/v2/token</code>.</div></div>
+          <div class="b"><div class="t">2 · Credential</div><div class="x"><b>Password</b> (bcrypt) + <b>MFA</b> (TOTP / Passkey-WebAuthn / OTP email) + <b>External IdP</b> federation (Google, Microsoft, SAML…). Local user hoặc JIT từ Google.</div></div>
+          <div class="b"><div class="t">3 · Session & Token</div><div class="x">Sau login: <b>Zitadel session cookie</b> (HTTP-only) + issue <b>id_token</b> + <b>access_token</b> (JWT, ký RSA, ~12h) + <b>refresh_token</b> (opaque, rotatable). Cookie refresh 1h → revoke user propagate &lt;1h.</div></div>
+          <div class="b"><div class="t">4 · Storage</div><div class="x"><b>Event-sourcing</b> trong Postgres — mọi action (user.added, password.check.succeeded…) là event append-only. Projection tables là view denormalized rebuild được. Audit + forensic free.</div></div>
+        </div>
+        <p class="mut mt-2 text-[12px]">Mã hoá at-rest: <code>ZITADEL_MASTERKEY</code> (AES) encrypt TOTP seeds, refresh tokens, OIDC/IdP client secrets. Mất masterkey = mất MFA + tokens (password vẫn còn vì bcrypt độc lập). <b>Backup ≥2 nơi.</b></p>
+      </div>
+
       <div class="role">
         <h4>Vai trò</h4>
         <div class="grid4">
-          <div class="b"><div class="t">User store</div><div class="x">Local users (admin tạo); password + Passkey + TOTP</div></div>
+          <div class="b"><div class="t">User store</div><div class="x">Local users (admin tạo) + JIT từ Google IdP; password + Passkey + TOTP</div></div>
           <div class="b"><div class="t">OIDC</div><div class="x">Discovery <code>/.well-known/openid-configuration</code></div></div>
           <div class="b"><div class="t">MFA Policy</div><div class="x">Force MFA = ON, Passkey + TOTP allowed</div></div>
           <div class="b"><div class="t">Audit</div><div class="x">Event-sourced trong Postgres, expose Console UI</div></div>
         </div>
         <ul class="mt-3">
-          <li>Command: <code>start-from-init --masterkey ... --tlsMode disabled</code> — TLS terminate ở Traefik</li>
-          <li>Init container tự tạo schema + admin user lần đầu (ZITADEL_FIRSTINSTANCE_*)</li>
+          <li>Pipeline 3 container: <code>zitadel-init</code> (tạo schema) → <code>zitadel-setup</code> (bootstrap org/admin + tạo PAT login-client) → <code>zitadel</code> (runtime)</li>
+          <li>Org + admin human user khai báo trong <code>zitadel-steps.yaml</code> (envsubst qua <code>render-config.sh</code> → <code>.runtime.yaml</code>)</li>
+          <li>Env runtime: <code>ZITADEL_FIRSTINSTANCE_LOGINCLIENT_*</code> + <code>ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_*</code> + OIDC default URLs trỏ tới Login V2 sidecar</li>
           <li>Masterkey BẮT BUỘC random 32 bytes — lưu Bitwarden, không commit</li>
           <li>External secure = true để Zitadel sinh URL <code>https://</code> đúng (mặc dù internal HTTP)</li>
+          <li><b>v4 Console UI</b> tại <code>/ui/console</code> (Angular). Login flow KHÔNG còn ở binary này — chuyển sang sidecar <code>zitadel-login</code> tại <code>/ui/v2/login</code> (xem service ②b)</li>
+          <li>Container chạy <code>user: "0"</code> (root) để ghi <code>/zitadel/bootstrap/login-client.pat</code> volume — official v4 compose recommendation</li>
         </ul>
       </div>
 
@@ -224,9 +239,65 @@
         <h4>Files · env</h4>
         <table>
           <tr><td>Compose</td><td><code>infra/auth-vps/docker-compose.yml</code></td><td>Service <code>zitadel</code> + labels Traefik router</td></tr>
-          <tr><td>Env</td><td><code>infra/auth-vps/.env</code></td><td>ZITADEL_MASTERKEY, EXTERNAL*, POSTGRES_*, FIRSTINSTANCE_*</td></tr>
-          <tr><td>Postgres connection</td><td>env block trong compose</td><td>DATABASE_POSTGRES_HOST=postgres, USER + ADMIN credentials</td></tr>
-          <tr><td>Traefik label</td><td>compose label</td><td><code>traefik.http.services.zitadel.loadbalancer.server.scheme=h2c</code> (h2 cleartext)</td></tr>
+          <tr><td>Env</td><td><code>infra/auth-vps/.env</code></td><td>ZITADEL_MASTERKEY, ZITADEL_ADMIN_USERNAME/PASSWORD, EXTERNAL*, POSTGRES_*</td></tr>
+          <tr><td>Steps yaml</td><td><code>infra/auth-vps/zitadel-steps.yaml</code></td><td>FirstInstance: InstanceName, Org.Name, Human admin (rendered via envsubst)</td></tr>
+          <tr><td>Config yaml</td><td><code>infra/auth-vps/zitadel-config.yaml</code></td><td>LoginPolicy (ForceMFA), Telemetry opt-out, LogStore, DB connection (rendered via envsubst)</td></tr>
+          <tr><td>Render script</td><td><code>infra/auth-vps/scripts/render-config.sh</code></td><td>envsubst → <code>zitadel-config.runtime.yaml</code> + <code>zitadel-steps.runtime.yaml</code></td></tr>
+          <tr><td>Volume</td><td>named volume <code>zitadel-bootstrap</code></td><td>Setup ghi <code>/zitadel/bootstrap/login-client.pat</code>, login sidecar mount read-only</td></tr>
+          <tr><td>Traefik router rule</td><td>compose label</td><td><code>Host(...) && !PathPrefix("/ui/v2/login")</code> priority 100 — exclude Login V2 paths</td></tr>
+          <tr><td>Backend scheme</td><td>compose label</td><td><code>traefik.http.services.zitadel.loadbalancer.server.scheme=h2c</code> (HTTP/2 cleartext)</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2b. ZITADEL-LOGIN (v4 Login V2 sidecar) -->
+  <section id="zitadel-login" class="anchor mt-8">
+    <div class="card p-5">
+      <div class="svc-header">
+        <div>
+          <h3 class="text-lg font-semibold"><span class="num">②b</span>zitadel-login <span class="pill vio ml-1">Login V2 · Next.js sidecar</span></h3>
+          <p class="mut text-[12px] mt-1">Phục vụ Login V2 UI tại <code>/ui/v2/login/*</code> — service riêng tách khỏi binary Zitadel từ v4</p>
+        </div>
+        <div class="flex gap-2">
+          <span class="badge">image: ghcr.io/zitadel/zitadel-login:v4.15.3</span>
+          <span class="badge">internal port: 3000</span>
+        </div>
+      </div>
+
+      <div class="purpose">
+        <h4>⚡ Tác dụng — vì sao tồn tại</h4>
+        <p class="lead"><b>UI login mới của v4</b> — Next.js app gọi Zitadel API qua Session API. Trước v4, login UI bundle thẳng trong binary Go (templates). Từ v4, tách riêng để: customize dễ hơn (React/Next.js), iterate UX độc lập binary, deploy riêng nếu cần scale. <b>KHÔNG bundle</b> — nếu thiếu sidecar này, request <code>/ui/v2/login</code> → 404 (em đã trải nghiệm 30/6).</p>
+        <div class="grid3">
+          <div class="b"><div class="t">Giá trị 1 · Login UI modern</div><div class="x">Next.js + Tailwind — dark mode, i18n, passkey UX modern. Tách binary giúp custom branding không phải fork toàn Zitadel.</div></div>
+          <div class="b"><div class="t">Giá trị 2 · Default từ v4</div><div class="x">v4 set <code>LoginV2.Required=true</code> mặc định. Login V1 (bundled) sẽ deprecate ở v5+. Phải có sidecar để future-proof.</div></div>
+          <div class="b"><div class="t">Giá trị 3 · Tách scale</div><div class="x">UI traffic cao có thể scale login sidecar độc lập với API container.</div></div>
+        </div>
+      </div>
+
+      <div class="role">
+        <h4>Vai trò</h4>
+        <div class="grid4">
+          <div class="b"><div class="t">Auth tới API</div><div class="x">Đọc PAT từ <code>/zitadel/bootstrap/login-client.pat</code> (mount ro từ <code>zitadel-bootstrap</code> volume)</div></div>
+          <div class="b"><div class="t">API URL</div><div class="x"><code>ZITADEL_API_URL=http://zitadel:8080</code> (internal docker network)</div></div>
+          <div class="b"><div class="t">Path prefix</div><div class="x"><code>NEXT_PUBLIC_BASE_PATH=/ui/v2/login</code></div></div>
+          <div class="b"><div class="t">Healthcheck</div><div class="x">node script: <code>http://localhost:3000/ui/v2/login/healthy</code></div></div>
+        </div>
+        <ul class="mt-3">
+          <li>Traefik router priority 250 — match <code>PathPrefix("/ui/v2/login")</code> trước router zitadel (priority 100)</li>
+          <li>OIDC <code>/oauth/v2/authorize</code>, <code>/oauth/v2/token</code>, <code>/.well-known/*</code> vẫn do binary zitadel xử lý — login sidecar chỉ phục vụ UI</li>
+          <li>CUSTOM_REQUEST_HEADERS inject <code>Host</code> + <code>X-Forwarded-Proto:https</code> cho Next.js biết public URL khi sau Traefik TLS</li>
+          <li>Service user PAT có role <code>IAM_LOGIN_CLIENT</code> — tạo tự động bởi <code>zitadel-setup</code> qua env <code>ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH</code></li>
+          <li>Container chạy <code>user: "0"</code> (root) — official v4 recommendation</li>
+        </ul>
+      </div>
+
+      <div class="files">
+        <h4>Files · env</h4>
+        <table>
+          <tr><td>Compose service</td><td><code>infra/auth-vps/docker-compose.yml</code></td><td>Service <code>zitadel-login</code> + Traefik labels priority 250</td></tr>
+          <tr><td>Volume</td><td><code>zitadel-bootstrap:/zitadel/bootstrap:ro</code></td><td>Read PAT file (do setup ghi)</td></tr>
+          <tr><td>Depends on</td><td>—</td><td><code>zitadel</code> service_healthy (cần API up trước)</td></tr>
         </table>
       </div>
     </div>

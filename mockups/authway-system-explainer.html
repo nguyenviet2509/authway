@@ -57,7 +57,7 @@
       </div>
     </div>
     <div class="flex items-center gap-2 text-xs">
-      <span class="chip"><span class="dot" style="background:var(--ok)"></span> v2026.06 · Zitadel + oauth2-proxy</span>
+      <span class="chip"><span class="dot" style="background:var(--ok)"></span> 2026.06 · Zitadel v4.15 + Login V2 + oauth2-proxy</span>
       <span class="chip on">5 devs · ~10 internal apps</span>
     </div>
   </header>
@@ -123,7 +123,8 @@ flowchart LR
   end
   subgraph AUTH["auth-vps · 192.168.122.54 (docker compose)"]
     TA["traefik<br/>80 · 443 (tls internal)"]
-    Z["zitadel :8080<br/>OIDC issuer + admin UI"]
+    Z["zitadel :8080<br/>OIDC issuer + Console UI<br/>/oauth/v2/* · /ui/console"]
+    ZL["zitadel-login :3000<br/>Login V2 Next.js sidecar<br/>/ui/v2/login/* (v4 default)"]
     PGA[("postgres :5432<br/>users · sessions · audit")]
   end
   subgraph APP1["app-vps · 192.168.122.5x (docker compose)"]
@@ -142,6 +143,8 @@ flowchart LR
   FW --> TB
   FW --> TC
   TA --> Z
+  TA --> ZL
+  ZL --> Z
   Z --> PGA
   TB --> OP
   TB --> A1
@@ -169,7 +172,8 @@ flowchart LR
         </thead>
         <tbody>
           <tr><td><span class="pill cyan">traefik v3.4</span></td><td>auth + apps</td><td>80 · 443</td><td>Edge proxy, TLS, entrypoint-level strip-auth-in + security headers</td><td>Docker label-driven, entrypoint middleware apply mọi router (chống template drift)</td></tr>
-          <tr><td><span class="pill vio">zitadel v4.15</span></td><td>auth-vps</td><td>8080 (sau traefik, h2c)</td><td>OIDC issuer, local user store, MFA policy, audit event-sourced</td><td>Self-host AGPL, certified OIDC, passkey native, multi-app project hierarchy</td></tr>
+          <tr><td><span class="pill vio">zitadel v4.15</span></td><td>auth-vps</td><td>8080 (sau traefik, h2c)</td><td>OIDC issuer (<code>/oauth/v2/*</code>), Console UI (<code>/ui/console</code>), MFA policy, audit event-sourced</td><td>Self-host AGPL, certified OIDC, passkey native, multi-app project hierarchy</td></tr>
+          <tr><td><span class="pill vio">zitadel-login v4.15</span></td><td>auth-vps</td><td>3000 (sau traefik)</td><td>Login V2 UI (Next.js) phục vụ <code>/ui/v2/login/*</code> — sidecar tách khỏi binary từ v4</td><td>Bắt buộc ở v4 (default LoginV2=Required). Đọc PAT từ shared volume <code>zitadel-bootstrap</code> để gọi Session API</td></tr>
           <tr><td><span class="pill gray">postgres 16</span></td><td>auth-vps</td><td>5432 (local)</td><td>Persistence cho Zitadel: users, sessions, events, projects</td><td>Zitadel chỉ support Postgres; SQL chuẩn, dump dễ backup</td></tr>
           <tr><td><span class="pill lime">oauth2-proxy v7.7</span></td><td>mỗi app-vps</td><td>4180 (sole proxy)</td><td>OIDC client + reverse proxy: login flow + cookie + inject X-Auth-* + proxy upstream</td><td>Battle-tested. POC dùng làm sole proxy (không forwardAuth) — login flow + upstream gọn trong 1 instance</td></tr>
           <tr><td><span class="pill gray">app downstream</span></td><td>app-vps</td><td>tùy app</td><td>Vibe-code app — Next.js / static HTML / Streamlit. Đọc <code>X-Auth-Request-Email</code> để xác user</td><td>Mọi app cùng pattern; code change &lt;5 LOC</td></tr>

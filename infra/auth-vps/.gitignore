@@ -4,3 +4,4 @@ tls/
 *.key
 *.pem
 zitadel-config.runtime.yaml
+zitadel-steps.runtime.yaml

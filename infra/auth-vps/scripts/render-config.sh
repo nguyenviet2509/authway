@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 set -a; source .env; set +a
 
 # Verify required vars
-required=(ZITADEL_DB_USER ZITADEL_DB_PASSWORD POSTGRES_ADMIN_USER POSTGRES_ADMIN_PASSWORD)
+required=(ZITADEL_DB_USER ZITADEL_DB_PASSWORD POSTGRES_ADMIN_USER POSTGRES_ADMIN_PASSWORD ZITADEL_ADMIN_USERNAME ZITADEL_ADMIN_PASSWORD)
 for v in "${required[@]}"; do
   if [ -z "${!v:-}" ]; then
     echo "[render-config] FATAL: ${v} không có giá trị trong .env" >&2
@@ -18,4 +18,15 @@ done
 
 envsubst < zitadel-config.yaml > zitadel-config.runtime.yaml
 chmod 600 zitadel-config.runtime.yaml
-echo "[render-config] OK → zitadel-config.runtime.yaml"
+
+envsubst < zitadel-steps.yaml > zitadel-steps.runtime.yaml
+chmod 600 zitadel-steps.runtime.yaml
+
+# Sanity: verify placeholders đều resolve
+if grep -E '\$\{[A-Z_]+\}' zitadel-config.runtime.yaml zitadel-steps.runtime.yaml >/dev/null 2>&1; then
+  echo "[render-config] FATAL: còn placeholder chưa resolve trong runtime files" >&2
+  grep -nE '\$\{[A-Z_]+\}' zitadel-config.runtime.yaml zitadel-steps.runtime.yaml >&2
+  exit 1
+fi
+
+echo "[render-config] OK → zitadel-config.runtime.yaml + zitadel-steps.runtime.yaml"

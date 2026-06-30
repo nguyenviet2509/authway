@@ -260,11 +260,14 @@ flowchart TB
   classDef auth fill:#082f3f,stroke:#7dd3fc,color:#e0f7ff
   subgraph AUTHVPS[🔐 auth.company.com - Ubuntu 24.04, 4-16GB RAM]
     direction TB
-    TR[Traefik v3.4<br/>:80, :443 TLS terminate]:::auth
-    Z[Zitadel container<br/>:8080 HTTP nội bộ]:::auth
+    TR[Traefik v3.4<br/>:80, :443 TLS terminate<br/>route by PathPrefix]:::auth
+    Z[Zitadel API + Console<br/>:8080 HTTP nội bộ<br/>/oauth/v2 · /ui/console]:::auth
+    ZL[Zitadel Login V2<br/>:3000 Next.js sidecar<br/>/ui/v2/login/* — v4 default]:::auth
     PG[(Postgres 16<br/>không expose port host)]:::auth
     MH[Mailhog / SMTP relay<br/>cho email verify]:::auth
     TR --> Z
+    TR --> ZL
+    ZL -.PAT auth.-> Z
     Z --> PG
     Z --> MH
   end
@@ -296,10 +299,10 @@ openssl rand -hex 24      # ZITADEL_DB_PASSWORD</pre>
         <div class="flex items-center gap-2 mb-2"><span class="step-num">3</span><span class="font-semibold"><code class="inline">docker compose up -d</code> stack auth</span></div>
         <div class="text-sm mut mb-2">Reference: <code class="inline">infra/auth-vps/docker-compose.yml</code></div>
         <pre class="code">cd /opt/authway/infra/auth-vps
-bash scripts/render-config.sh   # envsubst zitadel-config.yaml
+bash scripts/render-config.sh   # envsubst → zitadel-config.runtime.yaml + zitadel-steps.runtime.yaml
 docker compose up -d
-docker compose logs -f zitadel-setup   # đợi "setup completed"</pre>
-        <div class="why mt-3">Compose tự chạy 3 service tuần tự: <code class="inline">postgres → zitadel-init → zitadel-setup → zitadel</code>. Init tạo schema, setup tạo org + admin user, start chạy production. Traefik route domain → Zitadel internal HTTP.</div>
+docker compose logs -f zitadel-setup   # đợi "setup completed" + PAT login-client tạo xong</pre>
+        <div class="why mt-3">Compose chạy pipeline v4: <code class="inline">postgres → zitadel-init → zitadel-setup → (zitadel + zitadel-login)</code>. Init tạo schema, setup tạo org/admin (từ <code class="inline">zitadel-steps.runtime.yaml</code>) + bootstrap PAT <code class="inline">login-client</code> vào named volume <code class="inline">zitadel-bootstrap</code>, zitadel runtime serve API + Console, zitadel-login (Next.js sidecar) đọc PAT để phục vụ Login V2 UI tại <code class="inline">/ui/v2/login</code>. Traefik split routing: <code class="inline">/ui/v2/login*</code> → login:3000 (priority 250), còn lại → zitadel:8080 h2c.</div>
       </div>
 
       <div class="card2 p-4">
