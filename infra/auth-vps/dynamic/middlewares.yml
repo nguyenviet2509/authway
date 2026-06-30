@@ -15,6 +15,10 @@ http:
           - "103.57.222.245/32"
           - "118.70.127.171/32"
           - "127.0.0.1/32"
+          # OpenVPN tunnel range nội bộ (client cấp IP 10.0.x.x khi connect qua VPN)
+          - "10.0.0.0/8"
+          # Docker bridge networks (curl/healthcheck từ chính auth-vps host)
+          - "172.16.0.0/12"
         # ipStrategy.depth=0 (default): dùng RemoteAddr connection thật
         # Nếu sau này đứng sau Cloudflare/LB → đổi sang depth=1 để lấy IP client từ X-Forwarded-For
         ipStrategy:
