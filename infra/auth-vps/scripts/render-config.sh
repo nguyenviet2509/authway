@@ -16,6 +16,15 @@ for v in "${required[@]}"; do
   fi
 done
 
+# Defensive: nếu Docker compose start trước khi script này chạy, nó sẽ auto-tạo
+# directory trống tại bind-mount path. Phải xóa trước khi envsubst (không ghi đè được dir).
+for f in zitadel-config.runtime.yaml zitadel-steps.runtime.yaml; do
+  if [ -d "$f" ]; then
+    echo "[render-config] WARN: '$f' tồn tại dưới dạng directory (docker auto-tạo) → xóa" >&2
+    rm -rf "$f"
+  fi
+done
+
 envsubst < zitadel-config.yaml > zitadel-config.runtime.yaml
 chmod 600 zitadel-config.runtime.yaml
 
