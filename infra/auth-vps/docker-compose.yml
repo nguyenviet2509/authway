@@ -36,7 +36,7 @@ services:
 
   zitadel-init:
     # Idempotent init: creates schema + admin
-    image: ghcr.io/zitadel/zitadel:v2.66.0
+    image: ghcr.io/zitadel/zitadel:v4.15.3
     restart: "no"
     networks: [internal]
     command: ["init", "--config", "/zitadel-config.yaml"]
@@ -58,7 +58,7 @@ services:
 
   zitadel-setup:
     # Bootstrap default org + admin user. Runs after init.
-    image: ghcr.io/zitadel/zitadel:v2.66.0
+    image: ghcr.io/zitadel/zitadel:v4.15.3
     restart: "no"
     networks: [internal]
     command:
@@ -95,7 +95,7 @@ services:
         condition: service_completed_successfully
 
   zitadel:
-    image: ghcr.io/zitadel/zitadel:v2.66.0
+    image: ghcr.io/zitadel/zitadel:v4.15.3
     restart: unless-stopped
     networks: [internal, edge]
     command:

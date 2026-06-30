@@ -4,7 +4,7 @@ date: 2026-06-26
 status: pending
 mode: sequential
 brainstorm: ../reports/brainstorm-260626-1800-selfhost-readiness-assessment.md
-blockedBy: [260626-1154-zitadel-iap-rollout]
+blockedBy: [260626-1154-zitadel-iap-rollout, 260630-0826-zitadel-bump-to-v4]
 blocks: []
 ---
 

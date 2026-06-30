@@ -7,7 +7,7 @@ Reference plan: [plans/260626-1154-zitadel-iap-rollout/phase-01-zitadel-central.
 | Service | Image | Network | Ingress |
 |---|---|---|---|
 | traefik | traefik:v3.2 | edge | 80/443 public |
-| zitadel | ghcr.io/zitadel/zitadel:v2.66.0 | internal+edge | qua traefik |
+| zitadel | ghcr.io/zitadel/zitadel:v4.15.3 | internal+edge | qua traefik |
 | postgres | postgres:16-alpine | internal | NEVER public |
 | mailhog (lab) | mailhog/mailhog:v1.0.1 | internal | 127.0.0.1:8025 |
 | uptime-kuma | louislam/uptime-kuma:1 | monitoring | 127.0.0.1:3001 |

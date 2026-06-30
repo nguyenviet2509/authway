@@ -9,7 +9,7 @@ Log:
 TLS:
   Enabled: false
 
-# Database — config trực tiếp qua YAML thay vì env (env var injection v2.66 có issue)
+# Database — config trực tiếp qua YAML thay vì env (env var injection có issue ở một số version)
 # Substitute giá trị qua envsubst trong start script
 Database:
   Postgres:
@@ -35,6 +35,10 @@ LogStore:
       Debounce:
         MinFrequency: 1s
         MaxBulkSize: 100
+
+# v4: opt-out service ping telemetry (avoid leaking instance metadata)
+Telemetry:
+  Enabled: false
 
 DefaultInstance:
   LoginPolicy:

@@ -82,7 +82,7 @@ Steps:
 
 ### 7.4 Zitadel upgrade SOP
 
-**Vấn đề**: Đang pin v2.66.0. Không có process check CVE / upgrade.
+**Vấn đề**: Pin v4.15.3 (latest stable 2026-06-22) sau bump từ v2.66.0 EOL. Cần process check CVE + quarterly bump drill.
 
 **Fix**: document SOP
 1. **Weekly check** (cron): script pull GitHub releases Zitadel → diff với current → Telegram alert nếu có new release
@@ -103,7 +103,7 @@ Steps:
 - [ ] Socket-proxy replace docker.sock mount
 - [ ] UFW microseg rules app-vps ↔ auth-vps
 - [ ] Upgrade SOP doc + cron check
-- [ ] First upgrade drill: bump v2.66.0 → v2.66.x latest, document timing
+- [ ] Quarterly upgrade drill: bump v4.x → v4 latest patch, document timing
 
 ## Success Criteria
 - Postgres connection từ Zitadel dùng SSL (verify với `pg_stat_ssl`)

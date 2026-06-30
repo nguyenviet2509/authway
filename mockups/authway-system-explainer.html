@@ -169,7 +169,7 @@ flowchart LR
         </thead>
         <tbody>
           <tr><td><span class="pill cyan">traefik v3.4</span></td><td>auth + apps</td><td>80 · 443</td><td>Edge proxy, TLS, entrypoint-level strip-auth-in + security headers</td><td>Docker label-driven, entrypoint middleware apply mọi router (chống template drift)</td></tr>
-          <tr><td><span class="pill vio">zitadel v2.66</span></td><td>auth-vps</td><td>8080 (sau traefik, h2c)</td><td>OIDC issuer, local user store, MFA policy, audit event-sourced</td><td>Self-host AGPL, certified OIDC, passkey native, multi-app project hierarchy</td></tr>
+          <tr><td><span class="pill vio">zitadel v4.15</span></td><td>auth-vps</td><td>8080 (sau traefik, h2c)</td><td>OIDC issuer, local user store, MFA policy, audit event-sourced</td><td>Self-host AGPL, certified OIDC, passkey native, multi-app project hierarchy</td></tr>
           <tr><td><span class="pill gray">postgres 16</span></td><td>auth-vps</td><td>5432 (local)</td><td>Persistence cho Zitadel: users, sessions, events, projects</td><td>Zitadel chỉ support Postgres; SQL chuẩn, dump dễ backup</td></tr>
           <tr><td><span class="pill lime">oauth2-proxy v7.7</span></td><td>mỗi app-vps</td><td>4180 (sole proxy)</td><td>OIDC client + reverse proxy: login flow + cookie + inject X-Auth-* + proxy upstream</td><td>Battle-tested. POC dùng làm sole proxy (không forwardAuth) — login flow + upstream gọn trong 1 instance</td></tr>
           <tr><td><span class="pill gray">app downstream</span></td><td>app-vps</td><td>tùy app</td><td>Vibe-code app — Next.js / static HTML / Streamlit. Đọc <code>X-Auth-Request-Email</code> để xác user</td><td>Mọi app cùng pattern; code change &lt;5 LOC</td></tr>

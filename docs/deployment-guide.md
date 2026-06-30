@@ -175,7 +175,7 @@ services:
       retries: 5
 
   zitadel:
-    image: ghcr.io/zitadel/zitadel:v2.66
+    image: ghcr.io/zitadel/zitadel:v4.15.3
     restart: unless-stopped
     command: 'start-from-init --masterkey "${ZITADEL_MASTERKEY}" --tlsMode disabled'
     depends_on:
