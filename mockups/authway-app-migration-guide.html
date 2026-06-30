@@ -62,6 +62,96 @@
     </div>
   </header>
 
+  <!-- PRIMER · Zitadel + Authway in 1 page -->
+  <section id="primer" class="card p-6 sect">
+    <div class="h-title mb-3">0 · Primer — Đọc trước khi migrate</div>
+    <h2 class="text-xl font-semibold mb-1">Authway là gì? <span class="mut font-normal">— 1 trang đủ context</span></h2>
+    <p class="mut text-sm mb-5 max-w-3xl">Auth tập trung cho mọi internal tool — <span class="acc">login 1 lần</span>, đi khắp nơi, có <span class="ok">MFA</span> + <span class="vio">audit log</span>. Dành cho dev/lead/PM mở file lần đầu.</p>
+
+    <!-- Block 1 · One-liner diagram -->
+    <div class="card2 p-5 mb-5">
+      <svg viewBox="0 0 760 130" class="w-full" style="max-height:140px" xmlns="http://www.w3.org/2000/svg" aria-label="User to Auth VPS to App VPS topology">
+        <defs>
+          <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7dd3fc"/></marker>
+        </defs>
+        <!-- User -->
+        <g><rect x="20" y="40" width="120" height="50" rx="10" fill="#15151a" stroke="#8a8a96"/><text x="80" y="62" text-anchor="middle" fill="#ededf0" font-size="13" font-family="Inter">👤 User</text><text x="80" y="80" text-anchor="middle" fill="#8a8a96" font-size="11" font-family="Inter">Trình duyệt</text></g>
+        <!-- Auth VPS -->
+        <g><rect x="270" y="20" width="220" height="90" rx="12" fill="#082f3f" stroke="#7dd3fc"/><text x="380" y="45" text-anchor="middle" fill="#a5f3fc" font-size="13" font-family="Inter" font-weight="600">🔐 Auth VPS</text><text x="380" y="65" text-anchor="middle" fill="#e0f7ff" font-size="12" font-family="Inter">Zitadel (OIDC Issuer)</text><text x="380" y="83" text-anchor="middle" fill="#8a8a96" font-size="11" font-family="Inter">Postgres · Traefik · Backup</text><text x="380" y="100" text-anchor="middle" fill="#8a8a96" font-size="11" font-family="Inter">1 server, dùng chung cả team</text></g>
+        <!-- App VPS -->
+        <g><rect x="600" y="20" width="140" height="90" rx="12" fill="#0c2a12" stroke="#86efac"/><text x="670" y="45" text-anchor="middle" fill="#dcfce7" font-size="13" font-family="Inter" font-weight="600">📦 App VPS</text><text x="670" y="63" text-anchor="middle" fill="#dcfce7" font-size="11" font-family="Inter">1..N</text><text x="670" y="80" text-anchor="middle" fill="#8a8a96" font-size="11" font-family="Inter">oauth2-proxy</text><text x="670" y="95" text-anchor="middle" fill="#8a8a96" font-size="11" font-family="Inter">+ app container</text></g>
+        <!-- arrows -->
+        <line x1="140" y1="65" x2="265" y2="65" stroke="#7dd3fc" stroke-width="2" marker-end="url(#arrA)"/>
+        <line x1="595" y1="65" x2="495" y2="65" stroke="#7dd3fc" stroke-width="2" marker-end="url(#arrA)"/>
+        <text x="200" y="58" text-anchor="middle" fill="#8a8a96" font-size="10" font-family="Inter">HTTPS</text>
+        <text x="545" y="58" text-anchor="middle" fill="#8a8a96" font-size="10" font-family="Inter">OIDC redirect</text>
+      </svg>
+      <p class="text-xs mut mt-2 text-center">Trái = <span class="acc">identity tập trung</span>. Phải = <span class="ok">các app team tự host</span>, mỗi member 1 VPS.</p>
+    </div>
+
+    <!-- Block 2 + 3 · 2 columns -->
+    <div class="grid md:grid-cols-2 gap-4 mb-5">
+      <div class="card2 p-5">
+        <div class="h-title mb-3 vio">Zitadel đóng vai gì?</div>
+        <ul class="text-sm space-y-3">
+          <li><span class="vio font-semibold">Identity Provider (IdP).</span> <span class="mut">Giữ user/password/MFA, cấp token OIDC. App không tự handle login nữa.</span></li>
+          <li><span class="vio font-semibold">Admin Console.</span> <span class="mut">UI thêm/khoá user, gán project, xem audit log. Lead dùng UI — không sửa code.</span></li>
+          <li><span class="vio font-semibold">SSO + Session.</span> <span class="mut">Login Zitadel 1 lần → vào mọi app đã đăng ký, không nhập lại pass.</span></li>
+        </ul>
+      </div>
+      <div class="card2 p-5">
+        <div class="h-title mb-3 ok">Sao chọn Zitadel?</div>
+        <ul class="text-sm space-y-3">
+          <li><span class="ok font-semibold">Self-host.</span> <span class="mut">Không khoá vendor như Auth0/Okta → tiết kiệm chi phí, data tự kiểm soát.</span></li>
+          <li><span class="ok font-semibold">MFA + audit sẵn.</span> <span class="mut">Không build tay, đạt yêu cầu compliance ngay khi bật.</span></li>
+          <li><span class="ok font-semibold">OIDC chuẩn.</span> <span class="mut">Mọi framework / oauth2-proxy plug-in được. Không lock stack.</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Block 4 · Infra 1 hình -->
+    <div class="card2 p-5">
+      <div class="h-title mb-3">Infra — 1 hình</div>
+      <svg viewBox="0 0 800 240" class="w-full" style="max-height:280px" xmlns="http://www.w3.org/2000/svg" aria-label="Infra topology: Auth VPS and App VPS">
+        <defs>
+          <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c4b5fd"/></marker>
+        </defs>
+        <!-- Auth VPS box -->
+        <g>
+          <rect x="20" y="20" width="340" height="200" rx="14" fill="#082f3f" stroke="#7dd3fc" stroke-width="1.5"/>
+          <text x="40" y="48" fill="#a5f3fc" font-size="14" font-family="Inter" font-weight="700">🔐 Auth VPS</text>
+          <text x="40" y="66" fill="#8a8a96" font-size="11" font-family="Inter">auth.example.com · 1 server</text>
+          <!-- inner services -->
+          <rect x="40" y="84" width="140" height="40" rx="8" fill="#0c1a1f" stroke="#7dd3fc"/><text x="110" y="108" text-anchor="middle" fill="#e0f7ff" font-size="12" font-family="Inter">Traefik (TLS)</text>
+          <rect x="190" y="84" width="150" height="40" rx="8" fill="#0c1a1f" stroke="#7dd3fc"/><text x="265" y="108" text-anchor="middle" fill="#e0f7ff" font-size="12" font-family="Inter">Zitadel</text>
+          <rect x="40" y="138" width="140" height="40" rx="8" fill="#0c1a1f" stroke="#7dd3fc"/><text x="110" y="162" text-anchor="middle" fill="#e0f7ff" font-size="12" font-family="Inter">Postgres</text>
+          <rect x="190" y="138" width="150" height="40" rx="8" fill="#0c1a1f" stroke="#7dd3fc"/><text x="265" y="162" text-anchor="middle" fill="#e0f7ff" font-size="12" font-family="Inter">Backup cron</text>
+          <text x="40" y="202" fill="#8a8a96" font-size="11" font-family="Inter">Setup 1 lần. Lead/ops quản lý.</text>
+        </g>
+
+        <!-- App VPS box -->
+        <g>
+          <rect x="440" y="20" width="340" height="200" rx="14" fill="#0c2a12" stroke="#86efac" stroke-width="1.5"/>
+          <text x="460" y="48" fill="#dcfce7" font-size="14" font-family="Inter" font-weight="700">📦 App VPS (×N, mỗi member 1 cái)</text>
+          <text x="460" y="66" fill="#8a8a96" font-size="11" font-family="Inter">app1.example.com · app2.example.com · …</text>
+          <rect x="460" y="84" width="140" height="40" rx="8" fill="#0a1a0e" stroke="#86efac"/><text x="530" y="108" text-anchor="middle" fill="#dcfce7" font-size="12" font-family="Inter">Traefik (TLS)</text>
+          <rect x="610" y="84" width="150" height="40" rx="8" fill="#0a1a0e" stroke="#86efac"/><text x="685" y="108" text-anchor="middle" fill="#dcfce7" font-size="12" font-family="Inter">oauth2-proxy</text>
+          <rect x="460" y="138" width="300" height="40" rx="8" fill="#0a1a0e" stroke="#86efac"/><text x="610" y="162" text-anchor="middle" fill="#dcfce7" font-size="12" font-family="Inter">App container (đọc header X-User-*)</text>
+          <text x="460" y="202" fill="#8a8a96" font-size="11" font-family="Inter">Member tự deploy. Không tự build login.</text>
+        </g>
+
+        <!-- OIDC arrow between -->
+        <line x1="360" y1="120" x2="440" y2="120" stroke="#c4b5fd" stroke-width="2" marker-end="url(#arrB)" marker-start="url(#arrB)"/>
+        <text x="400" y="112" text-anchor="middle" fill="#c4b5fd" font-size="11" font-family="Inter" font-weight="600">OIDC</text>
+        <text x="400" y="138" text-anchor="middle" fill="#8a8a96" font-size="10" font-family="Inter">HTTPS · 443</text>
+      </svg>
+      <p class="text-xs mut mt-3">
+        Muốn xem chi tiết từng service → mở <code class="inline">authway-services-detail.html</code>.
+        Muốn xem login flow step-by-step → mở <code class="inline">authway-system-explainer.html</code>.
+      </p>
+    </div>
+  </section>
+
   <!-- ARCHITECTURE OVERVIEW -->
   <section id="overview" class="card p-6 sect">
     <div class="h-title mb-3">1 · Tổng quan kiến trúc</div>

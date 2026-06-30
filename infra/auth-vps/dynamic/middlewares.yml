@@ -27,11 +27,13 @@ http:
           depth: 0
 
     # Rate-limit Zitadel login/authorize paths (red-team #14)
+    # Bao phủ cả Angular SPA console (1 lần F5 = vài chục assets + gRPC calls)
+    # 300/min sustained vẫn chặn brute force; burst 600 cho SPA reload thoải mái
     ratelimit-auth:
       rateLimit:
-        average: 30
+        average: 300
         period: 1m
-        burst: 60
+        burst: 600
         sourceCriterion:
           ipStrategy:
             depth: 0
