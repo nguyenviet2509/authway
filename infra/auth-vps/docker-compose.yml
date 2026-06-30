@@ -40,6 +40,7 @@ services:
     # Idempotent init: creates schema + admin
     image: ghcr.io/zitadel/zitadel:v4.15.3
     restart: "no"
+    user: "0"  # v4: cần root để ghi bootstrap volume + tạo PAT file
     networks: [internal]
     command: ["init", "--config", "/zitadel-config.yaml"]
     environment:
@@ -62,6 +63,7 @@ services:
     # Bootstrap default org + admin user. Runs after init.
     image: ghcr.io/zitadel/zitadel:v4.15.3
     restart: "no"
+    user: "0"  # v4: cần root để ghi /zitadel/bootstrap/login-client.pat
     networks: [internal]
     command:
       - setup
@@ -108,6 +110,7 @@ services:
   zitadel:
     image: ghcr.io/zitadel/zitadel:v4.15.3
     restart: unless-stopped
+    user: "0"  # v4: align với init/setup (cùng UID xử lý bootstrap volume)
     networks: [internal, edge]
     command:
       - start
@@ -164,6 +167,7 @@ services:
   zitadel-login:
     image: ghcr.io/zitadel/zitadel-login:v4.15.3
     restart: unless-stopped
+    user: "0"  # v4 official compose recommendation
     networks: [internal, edge]
     environment:
       ZITADEL_API_URL: http://zitadel:8080

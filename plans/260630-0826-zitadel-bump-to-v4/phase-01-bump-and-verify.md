@@ -16,10 +16,12 @@ Bump Docker image `ghcr.io/zitadel/zitadel:v2.66.0` → `v4.15.3` ở 3 service 
 
 ## Key Insights
 - v4 dùng cùng Postgres schema migration framework — setup steps tự chạy khi init lần đầu
-- Login V2 default ở v4 → UI khác hẳn v1. oauth2-proxy chỉ care OIDC discovery + token → không impact
+- **Login V2 ở v4 là service RIÊNG** (`ghcr.io/zitadel/zitadel-login` Next.js), KHÔNG bundle trong binary — phải deploy sidecar + Traefik route `/ui/v2/login` → login:3000
+- `login-client` PAT tạo tại setup time qua env `ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH` + named volume `zitadel-bootstrap` share giữa setup ↔ login
 - Service Ping telemetry mặc định ON ở v4 → cần `Telemetry.Enabled: false` trong zitadel-config.yaml nếu muốn opt-out
-- `LoginPolicy.PasswordlessType: 1` enum giữ nguyên v2→v4 (đã verify qua release notes, không có breaking ở policy schema)
+- `LoginPolicy.PasswordlessType: 1` enum giữ nguyên v2→v4
 - `ssl-insecure-skip-verify=true` ở oauth2-proxy (lab self-signed) → giữ nguyên
+- Trong lab gặp Traefik 403 do entrypoint-level IP allowlist không cover VPN tunnel range 10.x — fix bằng add `10.0.0.0/8` + `172.16.0.0/12` (Docker bridge) vào sourceRange
 
 ## Requirements
 
@@ -143,6 +145,9 @@ File `plans/260626-1808-production-hardening-1vps-fallback/phase-07-misc-hardeni
 - [x] Append Telemetry opt-out block trong zitadel-config.yaml
 - [x] Update 6 docs/mockup files (zero `v2.66` còn lại trong code/docs paths)
 - [x] Update phase-07-misc-hardening.md (2 dòng)
+- [x] Add VPN tunnel + Docker bridge ranges vào dynamic/middlewares.yml ipallowlist
+- [x] Add zitadel-login sidecar service + Traefik routing `/ui/v2/login` + LoginV2 env vars trong docker-compose.yml
+- [x] Add named volume `zitadel-bootstrap` cho PAT share giữa setup ↔ login
 
 ### VPS-side ops (pending — user phải chạy trên auth-vps 192.168.122.54)
 - [ ] Backup state, confirm git clean
