@@ -11,6 +11,8 @@ networks:
 volumes:
   postgres-data:
   zitadel-data:
+  # v4: shared bootstrap dir — setup tạo login-client PAT, login sidecar đọc
+  zitadel-bootstrap:
   traefik-acme:
   traefik-logs:
 
@@ -87,9 +89,18 @@ services:
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: ${ZITADEL_ADMIN_USERNAME}
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD}
       ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "true"
+      # v4 Login V2: service-user PAT cho login sidecar gọi zitadel API
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /zitadel/bootstrap/login-client.pat
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: "Automatically Initialized IAM_LOGIN_CLIENT"
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      # v4 Login V2 feature flag — bật mặc định cho instance
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: https://${ZITADEL_EXTERNAL_DOMAIN}/ui/v2/login/
     volumes:
       - ./zitadel-config.runtime.yaml:/zitadel-config.yaml:ro
       - ./zitadel-steps.yaml:/zitadel-steps.yaml:ro
+      - zitadel-bootstrap:/zitadel/bootstrap:rw
     depends_on:
       zitadel-init:
         condition: service_completed_successfully
@@ -119,6 +130,10 @@ services:
       ZITADEL_EXTERNALDOMAIN: ${ZITADEL_EXTERNAL_DOMAIN}
       ZITADEL_EXTERNALPORT: 443
       ZITADEL_EXTERNALSECURE: "true"
+      # v4 OIDC/SAML: redirect login flows → Login V2 sidecar
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: https://${ZITADEL_EXTERNAL_DOMAIN}/ui/v2/login/login?authRequest=
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: https://${ZITADEL_EXTERNAL_DOMAIN}/ui/v2/login/logout?post_logout_redirect=
+      ZITADEL_SAML_DEFAULTLOGINURLV2: https://${ZITADEL_EXTERNAL_DOMAIN}/ui/v2/login/login?samlRequest=
     volumes:
       - ./zitadel-config.runtime.yaml:/zitadel-config.yaml:ro
       - zitadel-data:/data
@@ -128,9 +143,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=authway-auth_edge"
-      - "traefik.http.routers.zitadel.rule=Host(`${ZITADEL_EXTERNAL_DOMAIN}`)"
+      # Exclude /ui/v2/login path — route to zitadel-login sidecar instead
+      - "traefik.http.routers.zitadel.rule=Host(`${ZITADEL_EXTERNAL_DOMAIN}`) && !PathPrefix(`/ui/v2/login`)"
       - "traefik.http.routers.zitadel.entrypoints=websecure"
       - "traefik.http.routers.zitadel.tls=true"
+      - "traefik.http.routers.zitadel.priority=100"
       # Rate-limit auth paths (red-team #14)
       - "traefik.http.routers.zitadel.middlewares=ratelimit-auth@file,security-headers@file"
       - "traefik.http.services.zitadel.loadbalancer.server.port=8080"
@@ -142,6 +159,38 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+  # v4 Login V2 sidecar — Next.js app phục vụ /ui/v2/login/* (mới ở v4, không bundle trong binary)
+  zitadel-login:
+    image: ghcr.io/zitadel/zitadel-login:v4.15.3
+    restart: unless-stopped
+    networks: [internal, edge]
+    environment:
+      ZITADEL_API_URL: http://zitadel:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /zitadel/bootstrap/login-client.pat
+      # Inject host header + scheme cho Next.js biết public URL khi sau Traefik TLS termination
+      CUSTOM_REQUEST_HEADERS: "Host:${ZITADEL_EXTERNAL_DOMAIN},X-Forwarded-Proto:https"
+    volumes:
+      - zitadel-bootstrap:/zitadel/bootstrap:ro
+    depends_on:
+      zitadel:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/bin/sh", "-c", "node /app/healthcheck.mjs http://localhost:3000/ui/v2/login/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=authway-auth_edge"
+      - "traefik.http.routers.zitadel-login.rule=Host(`${ZITADEL_EXTERNAL_DOMAIN}`) && PathPrefix(`/ui/v2/login`)"
+      - "traefik.http.routers.zitadel-login.entrypoints=websecure"
+      - "traefik.http.routers.zitadel-login.tls=true"
+      - "traefik.http.routers.zitadel-login.priority=250"
+      - "traefik.http.routers.zitadel-login.middlewares=ratelimit-auth@file,security-headers@file"
+      - "traefik.http.services.zitadel-login.loadbalancer.server.port=3000"
 
   traefik:
     image: traefik:v3.2
