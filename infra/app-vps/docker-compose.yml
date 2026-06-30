@@ -126,3 +126,50 @@ services:
       - ../../sample-apps/static-iap-demo/html:/usr/share/nginx/html:ro
       - ../../sample-apps/static-iap-demo/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     # KHÔNG có traefik labels — chỉ reachable từ oauth2-proxy-static
+
+  # ── oauth2-proxy cho AutoSSL ──────────────────────────
+  oauth2-proxy-autossl:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.7.1
+    restart: unless-stopped
+    networks: [edge, internal]
+    command:
+      - --http-address=0.0.0.0:4180
+      - --provider=oidc
+      - --oidc-issuer-url=${ZITADEL_ISSUER_URL}
+      - --client-id=${AUTOSSL_CLIENT_ID}
+      - --client-secret=${AUTOSSL_CLIENT_SECRET}
+      - --redirect-url=https://${AUTOSSL_HOSTNAME}/oauth2/callback
+      - --cookie-secret=${AUTOSSL_COOKIE_SECRET}
+      - --cookie-domain=${AUTOSSL_HOSTNAME}
+      - --cookie-secure=true
+      - --cookie-refresh=1h
+      - --whitelist-domain=${ZITADEL_HOSTNAME}
+      - --reverse-proxy=true
+      - --set-xauthrequest=true
+      - --pass-access-token=false
+      - --pass-authorization-header=false
+      - --email-domain=*
+      - --skip-provider-button=true
+      - --upstream=http://autossl:3000
+      - --ssl-insecure-skip-verify=true   # LAB ONLY
+      - --custom-templates-dir=/templates
+    volumes:
+      - ./templates:/templates:ro
+    extra_hosts:
+      - "${ZITADEL_HOSTNAME}:${ZITADEL_IP}"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=authway-app_edge"
+      - "traefik.http.routers.autossl.rule=Host(`${AUTOSSL_HOSTNAME}`)"
+      - "traefik.http.routers.autossl.entrypoints=websecure"
+      - "traefik.http.routers.autossl.tls=true"
+      - "traefik.http.services.autossl.loadbalancer.server.port=4180"
+
+  # ── AutoSSL Next.js app (internal only) ───────────────
+  autossl:
+    build:
+      context: ../../sample-apps/AutoSSL
+    restart: unless-stopped
+    networks: [internal]
+    # Middleware IP check tự pass-through khi env trống → KHÔNG set ALLOWED_IPS/CIDRS.
+    # Auth do oauth2-proxy lo; IP allowlist (nếu cần) đặt ở firewall host hoặc traefik.
