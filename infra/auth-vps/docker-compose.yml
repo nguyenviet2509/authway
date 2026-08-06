@@ -37,7 +37,7 @@ services:
 
   zitadel-init:
     # Idempotent init: creates schema + admin
-    image: ghcr.io/zitadel/zitadel:v4.15.3
+    image: ghcr.io/zitadel/zitadel:v4.16.1
     restart: "no"
     user: "0"  # v4: cần root để ghi bootstrap volume + tạo PAT file
     networks: [internal]
@@ -60,7 +60,7 @@ services:
 
   zitadel-setup:
     # Bootstrap default org + admin user. Runs after init.
-    image: ghcr.io/zitadel/zitadel:v4.15.3
+    image: ghcr.io/zitadel/zitadel:v4.16.1
     restart: "no"
     user: "0"  # v4: cần root để ghi /zitadel/bootstrap/login-client.pat
     networks: [internal]
@@ -85,6 +85,8 @@ services:
       ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
       ZITADEL_EXTERNALDOMAIN: ${ZITADEL_EXTERNAL_DOMAIN}
+      ZITADEL_INSTANCEHOSTHEADERS: x-forwarded-host,x-zitadel-instance-host
+      ZITADEL_PUBLICHOSTHEADERS: x-forwarded-host,x-zitadel-public-host
       ZITADEL_EXTERNALPORT: 443
       ZITADEL_EXTERNALSECURE: "true"
       # First instance org + human admin được khai báo trong zitadel-steps.yaml (single source)
@@ -105,10 +107,14 @@ services:
         condition: service_completed_successfully
 
   zitadel:
-    image: ghcr.io/zitadel/zitadel:v4.15.3
+    image: ghcr.io/zitadel/zitadel:v4.16.1
     restart: unless-stopped
     user: "0"  # v4: align với init/setup (cùng UID xử lý bootstrap volume)
-    networks: [internal, edge]
+    networks:
+      internal:
+        aliases:
+          - auth.lab.local
+      edge: {}
     command:
       - start
       - --masterkey
@@ -128,6 +134,8 @@ services:
       ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
       ZITADEL_EXTERNALDOMAIN: ${ZITADEL_EXTERNAL_DOMAIN}
+      ZITADEL_INSTANCEHOSTHEADERS: x-forwarded-host,x-zitadel-instance-host
+      ZITADEL_PUBLICHOSTHEADERS: x-forwarded-host,x-zitadel-public-host
       ZITADEL_EXTERNALPORT: 443
       ZITADEL_EXTERNALSECURE: "true"
       # v4 OIDC/SAML: redirect login flows → Login V2 sidecar
@@ -161,16 +169,16 @@ services:
 
   # v4 Login V2 sidecar — Next.js app phục vụ /ui/v2/login/* (mới ở v4, không bundle trong binary)
   zitadel-login:
-    image: ghcr.io/zitadel/zitadel-login:v4.15.3
+    image: ghcr.io/zitadel/zitadel-login:v4.16.1
     restart: unless-stopped
     user: "0"  # v4 official compose recommendation
     networks: [internal, edge]
     environment:
-      ZITADEL_API_URL: http://zitadel:8080
+      ZITADEL_API_URL: http://auth.lab.local:8080
       NEXT_PUBLIC_BASE_PATH: /ui/v2/login
       ZITADEL_SERVICE_USER_TOKEN_FILE: /zitadel/bootstrap/login-client.pat
       # Inject host header + scheme cho Next.js biết public URL khi sau Traefik TLS termination
-      CUSTOM_REQUEST_HEADERS: "Host:${ZITADEL_EXTERNAL_DOMAIN},X-Forwarded-Proto:https"
+      CUSTOM_REQUEST_HEADERS: "Host:${ZITADEL_EXTERNAL_DOMAIN},X-Forwarded-Host:${ZITADEL_EXTERNAL_DOMAIN},X-Forwarded-Proto:https"
     volumes:
       - zitadel-bootstrap:/zitadel/bootstrap:ro
     depends_on:
