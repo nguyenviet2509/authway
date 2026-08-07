@@ -1,0 +1,220 @@
+name: authway-prod
+
+networks:
+  # Internal: app containers only. NEVER expose to host 0.0.0.0.
+  internal:
+    driver: bridge
+  edge:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  # v4: shared bootstrap dir — setup writes login-client PAT, login sidecar reads
+  zitadel-bootstrap:
+  traefik-logs:
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks: [internal]
+    # NO ports: published — internal docker network only
+    environment:
+      POSTGRES_USER: ${POSTGRES_ADMIN_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zitadel-init:
+    # Idempotent init: creates schema + admin
+    image: ghcr.io/zitadel/zitadel:v4.16.1
+    restart: "no"
+    user: "0"
+    networks: [internal]
+    command: ["init", "--config", "/zitadel-config.yaml"]
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${ZITADEL_DB_USER}
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${ZITADEL_DB_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_ADMIN_USER}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+    volumes:
+      - ./zitadel-config.runtime.yaml:/zitadel-config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  zitadel-setup:
+    # Bootstrap default org + admin user. Runs after init.
+    image: ghcr.io/zitadel/zitadel:v4.16.1
+    restart: "no"
+    user: "0"
+    networks: [internal]
+    command:
+      - setup
+      - --masterkey
+      - ${ZITADEL_MASTERKEY}
+      - --tlsMode
+      - external
+      - --config
+      - /zitadel-config.yaml
+      - --steps
+      - /zitadel-steps.yaml
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${ZITADEL_DB_USER}
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${ZITADEL_DB_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_ADMIN_USER}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_EXTERNALDOMAIN: ${ZITADEL_EXTERNAL_DOMAIN}
+      ZITADEL_INSTANCEHOSTHEADERS: x-forwarded-host,x-zitadel-instance-host
+      ZITADEL_PUBLICHOSTHEADERS: x-forwarded-host,x-zitadel-public-host
+      # HTTP-only: port 80, no TLS
+      ZITADEL_EXTERNALPORT: 80
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_FIRSTINSTANCE_LOGINCLIENTPATPATH: /zitadel/bootstrap/login-client.pat
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_USERNAME: login-client
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_MACHINE_NAME: "Automatically Initialized IAM_LOGIN_CLIENT"
+      ZITADEL_FIRSTINSTANCE_ORG_LOGINCLIENT_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: "true"
+      # HTTP scheme for Login V2 base URI
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_BASEURI: http://${ZITADEL_EXTERNAL_DOMAIN}/ui/v2/login/
+    volumes:
+      - ./zitadel-config.runtime.yaml:/zitadel-config.yaml:ro
+      - ./zitadel-steps.runtime.yaml:/zitadel-steps.yaml:ro
+      - zitadel-bootstrap:/zitadel/bootstrap:rw
+    depends_on:
+      zitadel-init:
+        condition: service_completed_successfully
+
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v4.16.1
+    restart: unless-stopped
+    user: "0"
+    networks:
+      internal:
+        aliases:
+          - authway-vps.local
+      edge: {}
+    command:
+      - start
+      - --masterkey
+      - ${ZITADEL_MASTERKEY}
+      - --tlsMode
+      - external
+      - --config
+      - /zitadel-config.yaml
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${ZITADEL_DB_USER}
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${ZITADEL_DB_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: ${POSTGRES_ADMIN_USER}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_EXTERNALDOMAIN: ${ZITADEL_EXTERNAL_DOMAIN}
+      ZITADEL_INSTANCEHOSTHEADERS: x-forwarded-host,x-zitadel-instance-host
+      ZITADEL_PUBLICHOSTHEADERS: x-forwarded-host,x-zitadel-public-host
+      # HTTP-only: port 80, no TLS
+      ZITADEL_EXTERNALPORT: 80
+      ZITADEL_EXTERNALSECURE: "false"
+      # v4 OIDC/SAML: redirect login flows → Login V2 sidecar (HTTP scheme)
+      ZITADEL_OIDC_DEFAULTLOGINURLV2: http://${ZITADEL_EXTERNAL_DOMAIN}/ui/v2/login/login?authRequest=
+      ZITADEL_OIDC_DEFAULTLOGOUTURLV2: http://${ZITADEL_EXTERNAL_DOMAIN}/ui/v2/login/logout?post_logout_redirect=
+      ZITADEL_SAML_DEFAULTLOGINURLV2: http://${ZITADEL_EXTERNAL_DOMAIN}/ui/v2/login/login?samlRequest=
+    volumes:
+      - ./zitadel-config.runtime.yaml:/zitadel-config.yaml:ro
+    depends_on:
+      zitadel-setup:
+        condition: service_completed_successfully
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=authway-prod_edge"
+      # Exclude /ui/v2/login — route to zitadel-login sidecar instead
+      - "traefik.http.routers.zitadel.rule=Host(`${ZITADEL_EXTERNAL_DOMAIN}`) && !PathPrefix(`/ui/v2/login`)"
+      - "traefik.http.routers.zitadel.entrypoints=web"
+      - "traefik.http.routers.zitadel.tls=false"
+      - "traefik.http.routers.zitadel.priority=100"
+      - "traefik.http.routers.zitadel.middlewares=ratelimit-auth@file"
+      - "traefik.http.services.zitadel.loadbalancer.server.port=8080"
+      - "traefik.http.services.zitadel.loadbalancer.server.scheme=h2c"
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready", "--config", "/zitadel-config.yaml"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # v4 Login V2 sidecar — Next.js app serving /ui/v2/login/*
+  zitadel-login:
+    image: ghcr.io/zitadel/zitadel-login:v4.16.1
+    restart: unless-stopped
+    user: "0"
+    networks: [internal, edge]
+    environment:
+      ZITADEL_API_URL: http://authway-vps.local:8080
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /zitadel/bootstrap/login-client.pat
+      # HTTP: no X-Forwarded-Proto:https override
+      CUSTOM_REQUEST_HEADERS: "Host:${ZITADEL_EXTERNAL_DOMAIN},X-Forwarded-Host:${ZITADEL_EXTERNAL_DOMAIN},X-Forwarded-Proto:http"
+    volumes:
+      - zitadel-bootstrap:/zitadel/bootstrap:ro
+    depends_on:
+      zitadel:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/bin/sh", "-c", "node /app/healthcheck.mjs http://localhost:3000/ui/v2/login/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=authway-prod_edge"
+      - "traefik.http.routers.zitadel-login.rule=Host(`${ZITADEL_EXTERNAL_DOMAIN}`) && PathPrefix(`/ui/v2/login`)"
+      - "traefik.http.routers.zitadel-login.entrypoints=web"
+      - "traefik.http.routers.zitadel-login.tls=false"
+      - "traefik.http.routers.zitadel-login.priority=250"
+      - "traefik.http.routers.zitadel-login.middlewares=ratelimit-auth@file"
+      - "traefik.http.services.zitadel-login.loadbalancer.server.port=3000"
+
+  traefik:
+    # v3.7+ required: Docker Engine 29+ raised minAPIVersion to 1.40; Traefik v3.2/v3.3
+    # ships with Docker SDK that defaults to 1.24 and fails. v3.7 ships with updated SDK.
+    image: traefik:3.7
+    restart: unless-stopped
+    networks: [edge]
+    # No DOCKER_API_VERSION override — Traefik v3.2 negotiates Docker API version automatically
+    ports:
+      - "80:80"
+      # Dashboard only reachable via local SSH tunnel
+      - "127.0.0.1:8088:8080"
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./dynamic:/etc/traefik/dynamic:ro
+      - traefik-logs:/var/log/traefik
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # Mailhog for dev/test. Replace with real SMTP relay creds in Zitadel config for full prod.
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    restart: unless-stopped
+    networks: [internal]
+    ports:
+      - "127.0.0.1:8025:8025"

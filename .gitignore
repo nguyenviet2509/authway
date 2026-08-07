@@ -1,0 +1,13 @@
+# Runtime-generated configs (contain secrets after envsubst)
+infra/*/*.runtime.yaml
+
+# Env files with real credentials — NEVER commit
+infra/*/.env
+
+# Traefik TLS artifacts (self-signed certs, ACME JSON)
+infra/*/tls/
+infra/*/acme/
+
+# OS
+.DS_Store
+Thumbs.db

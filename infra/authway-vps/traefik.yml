@@ -1,0 +1,46 @@
+# Traefik static config — authway-vps prod (HTTP-only, TLS deferred)
+# Requires Traefik >= 3.7: Docker Engine 29+ minAPIVersion=1.40 incompatible with older Traefik Docker SDK
+# Dynamic config (middlewares) in ./dynamic/ + Docker labels
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+
+accessLog:
+  bufferingSize: 100
+  fields:
+    headers:
+      defaultMode: keep
+      names:
+        Authorization: drop
+        Cookie: drop
+
+api:
+  dashboard: true
+  insecure: true  # bound to 127.0.0.1:8088 only via compose — NOT exposed publicly
+
+entryPoints:
+  web:
+    address: ":80"
+    # No redirect to HTTPS — HTTP-only for pilot phase
+    # TLS deferred: when domain + cert ready, add websecure entrypoint here + ACME below
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: authway-prod_edge
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+# TLS/ACME deferred — uncomment when domain + cert available
+# certificatesResolvers:
+#   letsencrypt:
+#     acme:
+#       email: admin@company.com
+#       storage: /acme/acme.json
+#       tlsChallenge: {}

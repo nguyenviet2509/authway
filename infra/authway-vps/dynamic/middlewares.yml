@@ -1,0 +1,38 @@
+# Dynamic middlewares — authway-vps prod (HTTP-only)
+# No security-headers HSTS middleware (requires HTTPS)
+# Rate-limit + IP allowlist only
+
+http:
+  middlewares:
+    # IP allow list — office IPs + private network + localhost
+    # Expand sourceRange when new office/VPN IPs are added
+    ipallowlist-internal:
+      ipAllowList:
+        sourceRange:
+          - "123.25.21.12/32"
+          - "172.31.98.188/32"
+          - "115.73.218.192/32"
+          - "103.57.222.245/32"
+          - "118.70.127.171/32"
+          - "127.0.0.1/32"
+          # OpenVPN tunnel range
+          - "10.0.0.0/8"
+          # Private network (authway-vps eth0 subnet + Docker bridge)
+          - "10.200.0.0/24"
+          - "172.16.0.0/12"
+        ipStrategy:
+          depth: 0
+
+    # Rate-limit Zitadel login/authorize paths (brute-force mitigation)
+    # 300/min sustained; burst 600 to handle SPA reload
+    ratelimit-auth:
+      rateLimit:
+        average: 300
+        period: 1m
+        burst: 600
+        sourceCriterion:
+          ipStrategy:
+            depth: 0
+
+# NOTE: TLS options block removed — no HTTPS in pilot phase.
+# Restore when adding websecure entrypoint + cert.

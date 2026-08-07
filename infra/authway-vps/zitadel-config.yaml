@@ -1,0 +1,68 @@
+# Zitadel runtime config — authway-vps prod
+# Docs: https://zitadel.com/docs/self-hosting/manage/configure
+
+Log:
+  Level: info
+
+# TLS terminated externally (or bypassed in HTTP-only pilot).
+# Zitadel runs plain HTTP internal. Ready healthcheck reads this flag.
+TLS:
+  Enabled: false
+
+# Database — injected via envsubst in scripts/render-config.sh
+Database:
+  Postgres:
+    Host: postgres
+    Port: 5432
+    Database: zitadel
+    MaxOpenConns: 10
+    User:
+      Username: ${ZITADEL_DB_USER}
+      Password: ${ZITADEL_DB_PASSWORD}
+      SSL:
+        Mode: disable
+    Admin:
+      Username: ${POSTGRES_ADMIN_USER}
+      Password: ${POSTGRES_ADMIN_PASSWORD}
+      SSL:
+        Mode: disable
+
+LogStore:
+  Access:
+    Database:
+      Enabled: true
+      Debounce:
+        MinFrequency: 1s
+        MaxBulkSize: 100
+
+Telemetry:
+  Enabled: false
+
+DefaultInstance:
+  LoginPolicy:
+    AllowUsernamePassword: true
+    AllowRegister: false
+    AllowExternalIDP: false
+    ForceMFA: true
+    ForceMFALocalOnly: true
+    HidePasswordReset: true
+    AllowDomainDiscovery: false
+    DisableLoginWithEmail: false
+    DisableLoginWithPhone: true
+    SecondFactors:
+      - 1
+      - 2
+    MultiFactors:
+      - 1
+    PasswordlessType: 1
+
+  LockoutPolicy:
+    MaxPasswordAttempts: 5
+    ShowLockoutFailures: false
+
+  PasswordComplexityPolicy:
+    MinLength: 12
+    HasLowercase: true
+    HasUppercase: true
+    HasNumber: true
+    HasSymbol: true
