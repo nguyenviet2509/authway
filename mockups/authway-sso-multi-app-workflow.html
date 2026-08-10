@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<title>Authway · SSO Multi-App Workflow (KT internal + Zimbra LDAP)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0a0a0b;--card:#111114;--card2:#0e0e12;--line:#1f1f25;
+    --mut:#8a8a96;--fg:#ededf0;--acc:#7dd3fc;--acc2:#a5f3fc;
+    --warn:#fbbf24;--ok:#34d399;--err:#f87171;--vio:#c4b5fd;
+  }
+  html,body{background:var(--bg);color:var(--fg);font-family:'Geist',Inter,ui-sans-serif,system-ui;font-feature-settings:"ss01","cv11"}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px}
+  .card2{background:var(--card2);border:1px solid var(--line);border-radius:10px}
+  .mut{color:var(--mut)} .acc{color:var(--acc)}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .err{color:var(--err)} .vio{color:var(--vio)}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;font-size:11px;color:var(--mut);background:#0d0d11}
+  .chip.ok{color:var(--ok);border-color:#0f4d2f}
+  .chip.acc{color:var(--acc);border-color:#164a5c}
+  .chip.warn{color:var(--warn);border-color:#5c3f10}
+  .chip.vio{color:var(--vio);border-color:#3d2f5a}
+  .mermaid{background:transparent}
+  h1,h2,h3{letter-spacing:-0.02em}
+  code{background:#0d0d11;padding:2px 6px;border-radius:4px;font-size:12px;color:var(--acc2)}
+  .step{border-left:2px solid var(--line);padding-left:14px;margin-left:6px}
+  .step:hover{border-color:var(--acc)}
+  table{width:100%;font-size:13px}
+  th{text-align:left;color:var(--mut);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  .pill-user{background:#164a5c;color:var(--acc);padding:1px 6px;border-radius:4px;font-size:11px}
+  .pill-app{background:#3d2f5a;color:var(--vio);padding:1px 6px;border-radius:4px;font-size:11px}
+  .pill-svc{background:#0f4d2f;color:var(--ok);padding:1px 6px;border-radius:4px;font-size:11px}
+  .pill-idp{background:#5c3f10;color:var(--warn);padding:1px 6px;border-radius:4px;font-size:11px}
+</style>
+</head>
+<body class="p-6 max-w-7xl mx-auto">
+
+<header class="mb-6">
+  <div class="flex items-center gap-2 mb-2">
+    <span class="chip acc">Authway</span>
+    <span class="chip">Zitadel v4.16.1</span>
+    <span class="chip vio">SSO Multi-App</span>
+    <span class="chip warn">Draft · 2026-08-06</span>
+  </div>
+  <h1 class="text-3xl font-semibold">SSO đa app qua Zitadel + Zimbra LDAP</h1>
+  <p class="mut mt-2 text-sm">Kiến trúc login end-to-end cho toàn bộ app phòng KT (OneLog, OneMCP, vibecode apps). Đăng nhập 1 lần bằng email Zimbra → dùng tất cả app.</p>
+</header>
+
+<!-- Section 1: Big picture -->
+<section class="card p-6 mb-6">
+  <h2 class="text-xl font-semibold mb-3">1 · Big picture</h2>
+  <p class="mut text-sm mb-4">Nhân viên KT có 1 tài khoản email Zimbra duy nhất. Login lần đầu vào bất kỳ app nào → Zitadel redirect qua form LDAP → bind Zimbra → session cookie share cross-app trong <code>.inet.vn</code> domain → truy cập mọi app khác không phải login lại.</p>
+
+  <div class="mermaid">
+%%{init:{"theme":"dark","themeVariables":{"primaryColor":"#111114","primaryTextColor":"#ededf0","lineColor":"#8a8a96","fontFamily":"Geist,Inter"}}}%%
+flowchart LR
+  U["👤 KT User<br/>(browser)"] -->|1 truy cập| T["🛡️ Traefik<br/>edge · TLS"]
+  T -->|2 forwardAuth| O2P["🔐 oauth2-proxy<br/>IAP layer"]
+  O2P -->|3 chưa login → OIDC| Z["🎫 Zitadel<br/>IdP · v4.16.1"]
+  Z -->|4 LDAP bind| ZB["📮 Zimbra<br/>LDAP :636"]
+  ZB -.->|5 verify OK| Z
+  Z -.->|6 OIDC token| O2P
+  O2P -.->|7 cookie<br/>.inet.vn| U
+  U -->|8 request| T
+  T -->|9 header X-Auth-Request-Email| A1["📊 OneLog"]
+  T -->|9 header ...| A2["🤖 OneMCP"]
+  T -->|9 header ...| A3["✨ vibecode-*"]
+  style U fill:#164a5c,stroke:#7dd3fc
+  style Z fill:#5c3f10,stroke:#fbbf24
+  style ZB fill:#5c3f10,stroke:#fbbf24
+  style O2P fill:#0f4d2f,stroke:#34d399
+  style T fill:#0f4d2f,stroke:#34d399
+  style A1 fill:#3d2f5a,stroke:#c4b5fd
+  style A2 fill:#3d2f5a,stroke:#c4b5fd
+  style A3 fill:#3d2f5a,stroke:#c4b5fd
+  </div>
+
+  <div class="grid grid-cols-4 gap-3 mt-6 text-xs">
+    <div class="card2 p-3"><span class="pill-user">USER</span><p class="mut mt-2">KT nhân viên. 1 email Zimbra làm identity duy nhất.</p></div>
+    <div class="card2 p-3"><span class="pill-svc">EDGE/IAP</span><p class="mut mt-2">Traefik + oauth2-proxy. Bảo vệ mọi app không cần app biết auth.</p></div>
+    <div class="card2 p-3"><span class="pill-idp">IDP</span><p class="mut mt-2">Zitadel OIDC issuer. Zimbra là backend LDAP.</p></div>
+    <div class="card2 p-3"><span class="pill-app">APPS</span><p class="mut mt-2">OneLog, OneMCP, vibecode-* — đọc email từ HTTP header.</p></div>
+  </div>
+</section>
+
+<!-- Section 2: User journey -->
+<section class="card p-6 mb-6">
+  <h2 class="text-xl font-semibold mb-3">2 · User journey — login lần đầu</h2>
+  <p class="mut text-sm mb-4">Từ góc nhìn của user KT. Ví dụ user Hoan Dat mở OneMCP lần đầu:</p>
+
+  <div class="space-y-3 text-sm">
+    <div class="step">
+      <span class="chip acc">Step 1</span>
+      <p>Hoan Dat gõ <code>https://onemcp.inet.vn</code> vào browser.</p>
+    </div>
+    <div class="step">
+      <span class="chip acc">Step 2</span>
+      <p>Traefik chặn request, gọi <code>oauth2-proxy</code> hỏi "user này đã login chưa?". Chưa → redirect user qua <code>https://iap.inet.vn/oauth2/start</code>.</p>
+    </div>
+    <div class="step">
+      <span class="chip acc">Step 3</span>
+      <p>oauth2-proxy khởi tạo OIDC flow, redirect user qua <code>https://auth.inet.vn/ui/v2/login</code> (Zitadel).</p>
+    </div>
+    <div class="step">
+      <span class="chip acc">Step 4</span>
+      <p>Zitadel hiện login page với button <b>"Zimbra Mail"</b>. Hoan Dat click.</p>
+    </div>
+    <div class="step">
+      <span class="chip acc">Step 5</span>
+      <p>Zitadel hiện LDAP form. Hoan Dat nhập <code>hoandat@zimbra8815.inet.name.vn</code> + password Zimbra.</p>
+    </div>
+    <div class="step">
+      <span class="chip acc">Step 6</span>
+      <p>Zitadel bind vào Zimbra LDAP với credentials đó qua LDAPS :636. Zimbra return "OK" nếu đúng password.</p>
+    </div>
+    <div class="step">
+      <span class="chip ok">Step 7</span>
+      <p>Zitadel tự động tạo user (<b>auto-provision</b>) với attrs: email, họ tên từ Zimbra. Nếu là lần đầu, prompt setup MFA (OTP). Từ lần 2 → chỉ login + OTP.</p>
+    </div>
+    <div class="step">
+      <span class="chip ok">Step 8</span>
+      <p>Zitadel issue OIDC token → callback về oauth2-proxy → set cookie session cho domain <code>.inet.vn</code>.</p>
+    </div>
+    <div class="step">
+      <span class="chip ok">Step 9</span>
+      <p>Redirect user về <code>https://onemcp.inet.vn</code>. Traefik forward request kèm header <code>X-Auth-Request-Email: hoandat@zimbra8815.inet.name.vn</code>. OneMCP đọc header → biết ai đang login.</p>
+    </div>
+  </div>
+
+  <div class="card2 p-4 mt-5">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="chip ok">SSO benefit</span>
+    </div>
+    <p class="text-sm mut">Ngay sau đó, Hoan Dat mở tab mới <code>https://onelog.inet.vn</code> → <b>không phải login lại</b>. Cookie <code>.inet.vn</code> share cross-subdomain. Traefik forward luôn header email → OneLog nhận diện user.</p>
+  </div>
+</section>
+
+<!-- Section 3: Dev journey -->
+<section class="card p-6 mb-6">
+  <h2 class="text-xl font-semibold mb-3">3 · Dev journey — onboard app mới (vibecode)</h2>
+  <p class="mut text-sm mb-4">Dev KT có 1 app mới cần bảo vệ SSO. Không cần code auth. 3 bước:</p>
+
+  <div class="grid grid-cols-3 gap-4 text-sm">
+    <div class="card2 p-4">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="chip acc">1</span>
+        <b>Deploy app</b>
+      </div>
+      <p class="mut mb-3">Container app join network <code>edge</code> của Traefik. Không expose port public.</p>
+<pre class="text-xs bg-black/40 p-2 rounded overflow-x-auto"><code>myapp:
+  image: myorg/myapp:latest
+  networks: [edge]</code></pre>
+    </div>
+
+    <div class="card2 p-4">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="chip acc">2</span>
+        <b>Traefik labels</b>
+      </div>
+      <p class="mut mb-3">Thêm 3 label vào compose để Traefik route + auth.</p>
+<pre class="text-xs bg-black/40 p-2 rounded overflow-x-auto"><code>labels:
+  - "traefik.enable=true"
+  - "traefik.http.routers.myapp.rule=Host(`myapp.inet.vn`)"
+  - "traefik.http.routers.myapp.middlewares=iap-auth@file"</code></pre>
+    </div>
+
+    <div class="card2 p-4">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="chip acc">3</span>
+        <b>Đọc user email</b>
+      </div>
+      <p class="mut mb-3">Backend đọc header. 15 dòng code cho Node/Python/Go.</p>
+<pre class="text-xs bg-black/40 p-2 rounded overflow-x-auto"><code>// Node.js Express
+app.use((req, res, next) =&gt; {
+  req.userEmail = req.header('X-Auth-Request-Email');
+  next();
+});</code></pre>
+    </div>
+  </div>
+
+  <div class="card2 p-4 mt-5">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="chip ok">Effort</span>
+    </div>
+    <p class="text-sm mut">Onboard app mới &lt; <b>15 phút</b>. Không cần OIDC client library, không cần setup callback URL, không cần lưu client_secret trong app. Toàn bộ auth phức tạp handle ở IAP layer.</p>
+  </div>
+</section>
+
+<!-- Section 4: Component roles -->
+<section class="card p-6 mb-6">
+  <h2 class="text-xl font-semibold mb-3">4 · Vai trò từng component</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th>Loại</th>
+        <th>Vai trò</th>
+        <th>Owner</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Zimbra Mail</b></td>
+        <td><span class="pill-idp">DATA</span></td>
+        <td>Nguồn identity duy nhất (email + password). Đã có từ trước, không đổi. Zitadel query LDAP để verify.</td>
+        <td class="mut">Zimbra ops</td>
+      </tr>
+      <tr>
+        <td><b>Zitadel</b></td>
+        <td><span class="pill-idp">IDP</span></td>
+        <td>OIDC provider. Login UI, MFA, auto-provisioning user từ LDAP, issue OIDC token.</td>
+        <td class="mut">Authway team</td>
+      </tr>
+      <tr>
+        <td><b>oauth2-proxy</b></td>
+        <td><span class="pill-svc">IAP</span></td>
+        <td>Identity-Aware Proxy. Kiểm session cookie, redirect OIDC nếu chưa login, forward header user cho apps.</td>
+        <td class="mut">Authway team</td>
+      </tr>
+      <tr>
+        <td><b>Traefik</b></td>
+        <td><span class="pill-svc">EDGE</span></td>
+        <td>Reverse proxy TLS. Middleware <code>forwardAuth</code> gọi oauth2-proxy trước mỗi request. Forward header user cho backend.</td>
+        <td class="mut">Authway team</td>
+      </tr>
+      <tr>
+        <td><b>OneLog</b></td>
+        <td><span class="pill-app">APP</span></td>
+        <td>Log aggregation + monitoring. Đọc <code>X-Auth-Request-Email</code> header, không cần code auth.</td>
+        <td class="mut">KT team</td>
+      </tr>
+      <tr>
+        <td><b>OneMCP</b></td>
+        <td><span class="pill-app">APP</span></td>
+        <td>MCP portal cho AI clients. Đọc header. Bridge OpenWebUI dùng OIDC direct (opt-in).</td>
+        <td class="mut">KT team</td>
+      </tr>
+      <tr>
+        <td><b>vibecode-*</b></td>
+        <td><span class="pill-app">APP</span></td>
+        <td>Các app AI-assisted của KT. Onboarding 15 phút. Read email từ header là xong.</td>
+        <td class="mut">Vibecode devs</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- Section 5: LDAP flow inside Zitadel -->
+<section class="card p-6 mb-6">
+  <h2 class="text-xl font-semibold mb-3">5 · LDAP flow bên trong Zitadel</h2>
+  <p class="mut text-sm mb-4">Chi tiết Zitadel gọi Zimbra LDAP ra sao khi user submit form:</p>
+
+  <div class="mermaid">
+%%{init:{"theme":"dark","themeVariables":{"primaryColor":"#111114","primaryTextColor":"#ededf0","lineColor":"#8a8a96","fontFamily":"Geist,Inter"}}}%%
+sequenceDiagram
+  participant U as 👤 User
+  participant Z as 🎫 Zitadel
+  participant L as 📮 Zimbra LDAP
+  U->>Z: submit email + password
+  Z->>L: bind với service account<br/>uid=zitadel-bind,ou=people,...
+  L-->>Z: OK
+  Z->>L: search (mail=user@zimbra.vn)<br/>base=dc=vn
+  L-->>Z: return DN + attrs (cn, sn, mail)
+  Z->>L: bind với userDN + password
+  alt password đúng
+    L-->>Z: OK
+    Z->>Z: auto-create Zitadel user<br/>(nếu chưa có)
+    Z-->>U: OIDC token
+  else password sai
+    L-->>Z: Invalid credentials (49)
+    Z-->>U: "Invalid credentials"
+  end
+  </div>
+
+  <div class="grid grid-cols-2 gap-4 mt-5 text-sm">
+    <div class="card2 p-4">
+      <b class="acc">Attribute mapping</b>
+      <ul class="mut mt-2 space-y-1 text-xs">
+        <li>ID: <code>mail</code> (unique cross-domain)</li>
+        <li>Username / Email: <code>mail</code></li>
+        <li>First Name: <code>cn</code> (Zimbra không có givenName mặc định)</li>
+        <li>Last Name: <code>sn</code></li>
+        <li>Display Name: <code>cn</code></li>
+      </ul>
+    </div>
+    <div class="card2 p-4">
+      <b class="acc">Search config</b>
+      <ul class="mut mt-2 space-y-1 text-xs">
+        <li>Base DN: <code>dc=vn</code> (cross-domain broad)</li>
+        <li>User filter: <code>mail</code></li>
+        <li>Object classes: <code>inetOrgPerson</code>, <code>zimbraAccount</code></li>
+        <li>Timeout: 5s</li>
+        <li>Options: auto-create + auto-update ON</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Section 6: Current state + roadmap -->
+<section class="card p-6 mb-6">
+  <h2 class="text-xl font-semibold mb-3">6 · Current state & roadmap</h2>
+
+  <div class="grid grid-cols-2 gap-4">
+    <div>
+      <h3 class="text-sm font-semibold mb-2"><span class="chip ok">DONE — Lab</span></h3>
+      <ul class="text-sm mut space-y-2">
+        <li>✅ Zitadel v4.16.1 running lab (<code>authserver</code> 192.168.122.54)</li>
+        <li>✅ Zimbra lab LDAP :389 accessible + firewall verified</li>
+        <li>✅ Zitadel IdP config "Zimbra Mail (LAB)" active với attribute mapping</li>
+        <li>✅ Login flow browser end-to-end verified — user auto-create, MFA OTP setup</li>
+        <li>✅ Multi-tenant Zimbra domains cross-search (dc=vn base)</li>
+        <li>✅ Docker compose changes committed <code>authway</code> repo</li>
+      </ul>
+    </div>
+    <div>
+      <h3 class="text-sm font-semibold mb-2"><span class="chip warn">NEXT — Prod</span></h3>
+      <ul class="text-sm mut space-y-2">
+        <li>⏭️ Zitadel prod deploy v4.16.1+ (VPS + LE cert + Postgres backup)</li>
+        <li>⏭️ Zimbra prod LDAPS :636 (không dùng plaintext 389)</li>
+        <li>⏭️ Zimbra bind account ACL restrict <code>zimbraAccountStatus=active</code> (fix security gap từ lab T5)</li>
+        <li>⏭️ oauth2-proxy IAP baseline + Traefik middleware</li>
+        <li>⏭️ Pilot app rollout (OneMCP hoặc OneLog first)</li>
+        <li>⏭️ Onboarding docs + template cho vibecode devs</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card2 p-4 mt-5">
+    <b class="warn">⚠ Security note từ lab T5</b>
+    <p class="mut text-xs mt-2">Zimbra <code>zimbraAccountStatus=locked</code> KHÔNG block LDAP bind (chỉ block webmail/IMAP/POP). Prod bắt buộc apply Zimbra bind account ACL: bind account chỉ thấy accounts với <code>(zimbraAccountStatus=active)</code>. Nếu không, user bị khóa vẫn login SSO được.</p>
+  </div>
+</section>
+
+<!-- Section 7: FAQ -->
+<section class="card p-6 mb-6">
+  <h2 class="text-xl font-semibold mb-3">7 · FAQ</h2>
+  <div class="space-y-4 text-sm">
+    <div>
+      <b class="acc">❓ Nếu user đổi password trên Zimbra thì sao?</b>
+      <p class="mut mt-1">Session Zitadel hiện tại vẫn valid tới khi cookie expire (7d). Sau đó lần login mới, Zitadel bind Zimbra với password mới → OK. Không phải update gì ở Zitadel.</p>
+    </div>
+    <div>
+      <b class="acc">❓ Zimbra down có ảnh hưởng SSO không?</b>
+      <p class="mut mt-1">User đang trong session (7 ngày) → OK. User mới login trong lúc Zimbra down → fail (không bind được). Recovery: Zitadel local admin account bypass để login vào console + emergency ops.</p>
+    </div>
+    <div>
+      <b class="acc">❓ Logout thì sao?</b>
+      <p class="mut mt-1">User click "Logout" bất kỳ app → oauth2-proxy clear cookie + gọi Zitadel end_session → logout toàn bộ apps.</p>
+    </div>
+    <div>
+      <b class="acc">❓ User ngoài KT (khách, đối tác) login được không?</b>
+      <p class="mut mt-1">Không, hiện tại chỉ user có tài khoản Zimbra KT. Muốn support user ngoài → thêm IdP thứ 2 (Google OAuth hoặc local Zitadel user) — defer feature request tương lai.</p>
+    </div>
+    <div>
+      <b class="acc">❓ App cần API-only (curl, script) auth thì sao?</b>
+      <p class="mut mt-1">IAP browser-based. Cho API/mobile, app tự implement OIDC-native với Zitadel (opt-in). Ví dụ: OneMCP MCP endpoint cho AI client dùng bearer token flow riêng.</p>
+    </div>
+    <div>
+      <b class="acc">❓ Add domain Zimbra mới thì sao?</b>
+      <p class="mut mt-1">Nếu domain nằm trong Base DN hiện tại (<code>dc=vn</code>) → auto-work, không cần đổi Zitadel. Nếu ngoài (VD <code>.com</code>) → mở rộng Base DN trong Zitadel IdP config.</p>
+    </div>
+  </div>
+</section>
+
+<footer class="mt-8 text-center text-xs mut">
+  <p>Authway SSO Workflow · Draft 2026-08-06 · Related plan: <code>authway/plans/260806-1504-sso-multi-app-zitadel-ldap-rollout</code></p>
+</footer>
+
+<script>mermaid.initialize({startOnLoad:true,theme:"dark",themeVariables:{background:"transparent"}});</script>
+</body>
+</html>

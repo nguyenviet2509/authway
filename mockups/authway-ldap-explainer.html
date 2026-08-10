@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<title>Authway · LDAP & Zitadel Explainer</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0a0a0b;--card:#111114;--card2:#0e0e12;--line:#1f1f25;
+    --mut:#8a8a96;--fg:#ededf0;--acc:#7dd3fc;--acc2:#a5f3fc;
+    --warn:#fbbf24;--ok:#34d399;--err:#f87171;--vio:#c4b5fd;
+  }
+  html,body{background:var(--bg);color:var(--fg);font-family:'Geist',Inter,ui-sans-serif,system-ui;font-feature-settings:"ss01","cv11"}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px}
+  .card2{background:var(--card2);border:1px solid var(--line);border-radius:10px}
+  .mut{color:var(--mut)} .acc{color:var(--acc)}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .err{color:var(--err)} .vio{color:var(--vio)}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;font-size:11px;color:var(--mut);background:#0d0d11}
+  .chip.on{color:var(--fg);background:#15151a}
+  .dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+  .h-title{font-size:12px;text-transform:uppercase;letter-spacing:.18em;color:var(--mut)}
+  kbd{background:#1f1f25;border:1px solid #2a2a30;border-radius:4px;padding:1px 5px;font-size:10px;font-family:ui-monospace}
+  pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre{background:#0a0a0d;border:1px solid var(--line);border-radius:8px;padding:12px;font-size:12px;line-height:1.55;overflow:auto}
+  .step-num{width:22px;height:22px;border-radius:6px;background:#15151a;border:1px solid var(--line);display:inline-grid;place-items:center;font-size:11px;color:var(--acc);font-weight:600}
+  .grid-bg{background-image:linear-gradient(#15151a 1px,transparent 1px),linear-gradient(90deg,#15151a 1px,transparent 1px);background-size:24px 24px;background-position:-1px -1px}
+  details>summary{cursor:pointer;list-style:none}
+  details>summary::-webkit-details-marker{display:none}
+  .anchor{scroll-margin-top:24px}
+  .toc a{color:var(--mut)} .toc a:hover{color:var(--fg)}
+  .mermaid{background:transparent}
+  hr.sep{border:0;border-top:1px dashed #1f1f25;margin:18px 0}
+  .pill{display:inline-block;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:.04em}
+  .pill.cyan{background:#082f3f;color:#7dd3fc}
+  .pill.lime{background:#0c2a12;color:#86efac}
+  .pill.amber{background:#2a1f06;color:#fbbf24}
+  .pill.vio{background:#1f1a3a;color:#c4b5fd}
+  .pill.gray{background:#15151a;color:#cdd2d8}
+  .pill.red{background:#2a0a0a;color:#fda4af}
+  table.k{width:100%;font-size:13px;border-collapse:collapse}
+  table.k th,table.k td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  table.k th{color:var(--mut);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.12em}
+  .box-ok{border-color:#0c2a12;background:linear-gradient(180deg,#08130a,#0e0e12)}
+  .box-err{border-color:#2a0a0a;background:linear-gradient(180deg,#170808,#0e0e12)}
+  .box-warn{border-color:#2a1f06;background:linear-gradient(180deg,#1a1305,#0e0e12)}
+</style>
+</head>
+<body>
+<div class="max-w-[1280px] mx-auto p-6">
+
+  <!-- HEADER -->
+  <header class="flex items-center justify-between pb-5 border-b border-[#1f1f25]">
+    <div class="flex items-center gap-3">
+      <div class="size-9 rounded-xl bg-white text-black grid place-items-center font-black">A</div>
+      <div>
+        <div class="font-semibold leading-tight">Authway <span class="mut font-normal">/ LDAP explainer</span></div>
+        <div class="text-[11px] mut">LDAP protocol · Zitadel LDAP IdP · integration guide</div>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 text-xs">
+      <span class="chip"><span class="dot" style="background:var(--ok)"></span> Zitadel v4.15 · LDAP IdP GA</span>
+      <span class="chip on">Self-host only</span>
+    </div>
+  </header>
+
+  <!-- Mission banner -->
+  <div class="mt-4 card p-3.5 flex items-start gap-3" style="border-color:#082f3f;background:linear-gradient(180deg,#06131a,#0e0e12)">
+    <span class="pill cyan mt-0.5">TL;DR</span>
+    <div class="text-[13px] leading-relaxed">
+      Đang <b class="ok">test tích hợp Zimbra LDAP</b> (<code>mail.zimbra8815.inet.name.vn</code> · <code>103.57.220.98</code>) làm IdP cho Authway/Zitadel.
+      User email Zimbra → login Authway → Zitadel bind vào Zimbra OpenLDAP verify password → JIT tạo user trong Zitadel → phát OIDC token cho app.
+      <b class="err">Không</b> chiều ngược lại (Zitadel làm LDAP server cho legacy app).
+    </div>
+  </div>
+
+  <!-- Zimbra target infobox -->
+  <div class="mt-3 card p-4" style="border-color:#1f1a3a;background:linear-gradient(180deg,#0f0c1a,#0e0e12)">
+    <div class="flex items-center gap-2 mb-2">
+      <span class="pill vio">TARGET</span>
+      <div class="font-semibold text-[14px]">Zimbra mail server đang test</div>
+      <span class="chip on ml-auto">SSH ok · 51d uptime</span>
+    </div>
+    <div class="grid grid-cols-4 gap-3 text-[12px]">
+      <div class="card2 p-3">
+        <div class="h-title mb-1">Host</div>
+        <code>mail.zimbra8815.inet.name.vn</code><br/>
+        <code>103.57.220.98</code>
+      </div>
+      <div class="card2 p-3">
+        <div class="h-title mb-1">SSH</div>
+        <code>ssh zimbra-mail</code><br/>
+        port <code>24700</code> · user <code>root</code><br/>
+        key <code>~/.ssh/zimbra_ldap_test</code>
+      </div>
+      <div class="card2 p-3">
+        <div class="h-title mb-1">LDAP (sẽ recon)</div>
+        <code>ldap://:389</code> + StartTLS<br/>
+        <code>ldaps://:636</code> (nếu bật)<br/>
+        default bind: <code>uid=zimbra,cn=admins,cn=zimbra</code>
+      </div>
+      <div class="card2 p-3">
+        <div class="h-title mb-1">Zitadel (Authway)</div>
+        Self-hosted · v4.15+<br/>
+        LDAP IdP module · GA<br/>
+        JIT provisioning: ON
+      </div>
+    </div>
+  </div>
+
+  <!-- TOC + Hero -->
+  <section class="grid grid-cols-[1fr_280px] gap-4 mt-5">
+    <div class="card p-6 grid-bg">
+      <div class="h-title">What is LDAP</div>
+      <h1 class="text-2xl font-semibold mt-2">LDAP = "directory protocol" — cách legacy để lưu &amp; query user/group của tổ chức.</h1>
+      <p class="mut mt-3 text-sm leading-relaxed max-w-[820px]">
+        <b class="acc">LDAP</b> (Lightweight Directory Access Protocol) là chuẩn 1993, chạy trên TCP :389 (LDAP) hoặc :636 (LDAPS).
+        Nó lưu user/group dạng cây (DN — Distinguished Name, ví dụ <code>uid=alice,ou=people,dc=inet,dc=vn</code>) và cho phép app "bind" bằng username+password để verify.
+        <b>Active Directory</b> của Microsoft, <b>OpenLDAP</b>, <b>FreeIPA</b>, <b>389DS</b>, <b>lldap</b> đều là LDAP server.
+        LDAP KHÔNG phải OIDC — nó không có access token, không có scope, không có consent screen; chỉ có bind/search/modify.
+        App muốn dùng LDAP phải tự implement client (Java JNDI, Python ldap3, PHP ldap_*...) — không portable như OIDC.
+      </p>
+      <div class="flex flex-wrap gap-2 mt-4 text-xs">
+        <span class="chip on">📇 Directory tree (DN)</span>
+        <span class="chip on">🔐 Simple bind (u/p)</span>
+        <span class="chip on">🌳 Hierarchical (dc/ou/cn)</span>
+        <span class="chip on">🏢 Corp legacy (AD)</span>
+        <span class="chip on">⚠️ No token/scope/consent</span>
+      </div>
+    </div>
+    <nav class="card p-4 toc text-sm">
+      <div class="h-title mb-2">Mục lục</div>
+      <ol class="space-y-1.5">
+        <li><a href="#glossary">0. Từ viết tắt (glossary)</a></li>
+        <li><a href="#basics">1. LDAP cơ bản 60s</a></li>
+        <li><a href="#matrix">2. Ma trận support</a></li>
+        <li><a href="#idp">3. Chiều A · LDAP as IdP</a></li>
+        <li><a href="#server">4. Chiều B · Zitadel as LDAP</a></li>
+        <li><a href="#config">5. Config example</a></li>
+        <li><a href="#authway">6. Áp dụng Authway (Zimbra)</a></li>
+        <li><a href="#workflow">6+. Workflow config end-to-end</a></li>
+        <li><a href="#gotchas">7. Gotchas &amp; limits</a></li>
+        <li><a href="#decision">8. Decision matrix</a></li>
+      </ol>
+    </nav>
+  </section>
+
+  <!-- 0. GLOSSARY -->
+  <section id="glossary" class="anchor mt-8">
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-lg font-semibold"><span class="step-num">0</span> &nbsp;Từ viết tắt · glossary</h2>
+      <span class="mut text-xs">Đọc trước nếu chưa quen từ vựng identity</span>
+    </div>
+    <div class="card p-5 mt-3">
+      <div class="grid grid-cols-2 gap-x-8 gap-y-0">
+        <table class="k">
+          <tr><th style="width:110px">Viết tắt</th><th>Nghĩa · giải thích ngắn</th></tr>
+          <tr><td><b class="acc">LDAP</b></td><td><b>Lightweight Directory Access Protocol</b> — chuẩn 1993, TCP :389/:636, để query/verify user trong directory tree.</td></tr>
+          <tr><td><b class="acc">LDAPS</b></td><td>LDAP over <b>TLS</b> (port 636). Encrypted end-to-end. Bắt buộc ở production.</td></tr>
+          <tr><td><b class="acc">StartTLS</b></td><td>Kỹ thuật upgrade plain LDAP :389 lên TLS trong cùng connection. Thay thế LDAPS.</td></tr>
+          <tr><td><b class="acc">AD</b></td><td><b>Active Directory</b> — LDAP server + Kerberos của Microsoft, chạy trên Windows Domain Controller. LDAP-compatible.</td></tr>
+          <tr><td><b class="acc">DC</b></td><td><b>Domain Controller</b> (server chạy AD) · hoặc <b>Domain Component</b> (phần tử trong DN, ví dụ <code>dc=inet,dc=vn</code>). Tùy ngữ cảnh.</td></tr>
+          <tr><td><b class="acc">DN</b></td><td><b>Distinguished Name</b> — đường dẫn unique tới 1 entry trong LDAP tree. Ví dụ <code>uid=alice,ou=people,dc=inet,dc=vn</code>.</td></tr>
+          <tr><td><b class="acc">BaseDN</b></td><td>Điểm bắt đầu search trong tree. Ví dụ <code>dc=inet,dc=vn</code> = search toàn domain.</td></tr>
+          <tr><td><b class="acc">Bind DN</b></td><td>DN dùng để bind (login) vào LDAP server. Thường là service account.</td></tr>
+          <tr><td><b class="acc">OU</b></td><td><b>Organizational Unit</b> — thư mục con trong tree, ví dụ <code>ou=people</code>, <code>ou=groups</code>.</td></tr>
+          <tr><td><b class="acc">CN</b></td><td><b>Common Name</b> — tên hiển thị của entry (thường là full name).</td></tr>
+          <tr><td><b class="acc">UID</b></td><td><b>User ID</b> — username unique trong LDAP (OpenLDAP). AD dùng <code>sAMAccountName</code>.</td></tr>
+        </table>
+        <table class="k">
+          <tr><th style="width:110px">Viết tắt</th><th>Nghĩa · giải thích ngắn</th></tr>
+          <tr><td><b class="acc">IdP</b></td><td><b>Identity Provider</b> — hệ thống xác thực user (Zitadel, Google, Okta, AD, ...). Trả về ai đó "là ai".</td></tr>
+          <tr><td><b class="acc">SP</b></td><td><b>Service Provider</b> — app cần biết user. Nhận identity từ IdP.</td></tr>
+          <tr><td><b class="acc">SSO</b></td><td><b>Single Sign-On</b> — login 1 lần, vào nhiều app không phải nhập lại pw.</td></tr>
+          <tr><td><b class="acc">MFA</b></td><td><b>Multi-Factor Authentication</b> — thêm yếu tố ngoài pw (TOTP, passkey, SMS).</td></tr>
+          <tr><td><b class="acc">TOTP</b></td><td><b>Time-based One-Time Password</b> — mã 6 số đổi mỗi 30s (Google Authenticator, Authy).</td></tr>
+          <tr><td><b class="acc">OIDC</b></td><td><b>OpenID Connect</b> — chuẩn auth trên OAuth 2.0, phát <code>id_token</code> (JWT). Modern thay thế LDAP/SAML.</td></tr>
+          <tr><td><b class="acc">OAuth2</b></td><td>Chuẩn authorization (delegate quyền truy cập). OIDC = OAuth2 + identity layer.</td></tr>
+          <tr><td><b class="acc">JWT</b></td><td><b>JSON Web Token</b> — token có chữ ký, chứa claim (email, roles...). Format của <code>id_token</code>.</td></tr>
+          <tr><td><b class="acc">SAML</b></td><td>Chuẩn SSO cũ (XML-based). Enterprise vẫn dùng nhiều.</td></tr>
+          <tr><td><b class="acc">JIT</b></td><td><b>Just-In-Time provisioning</b> — auto tạo user trong Zitadel ở lần login đầu (thay vì import trước).</td></tr>
+          <tr><td><b class="acc">IAP</b></td><td><b>Identity-Aware Proxy</b> — pattern proxy sidecar (oauth2-proxy) chặn request chưa auth, giống Google Cloud IAP / Cloudflare Access.</td></tr>
+          <tr><td><b class="acc">CA</b></td><td><b>Certificate Authority</b> — bên phát cert TLS. Self-signed = tự ký, phải cấu hình trust riêng.</td></tr>
+          <tr><td><b class="acc">DN, RDN</b></td><td><b>Relative DN</b> = phần đầu tiên của DN (<code>uid=alice</code>). DN = RDN + parent path.</td></tr>
+        </table>
+      </div>
+      <hr class="sep"/>
+      <div class="grid grid-cols-4 gap-3 text-[12px]">
+        <div class="card2 p-3">
+          <div class="h-title mb-1">Tool cụ thể</div>
+          <b>OpenLDAP</b> — LDAP server open-source phổ biến (Linux).<br/>
+          <b>FreeIPA</b> — bộ suite IdM của Red Hat (LDAP + Kerberos + DNS).<br/>
+          <b>389DS</b> — LDAP server của Red Hat, kế thừa Netscape Directory.
+        </div>
+        <div class="card2 p-3">
+          <div class="h-title mb-1">Bridge tool</div>
+          <b>GlAuth</b> — LDAP server nhỏ dạng Go, config bằng TOML/YAML.<br/>
+          <b>lldap</b> — LDAP server nhẹ (Rust), có web UI.<br/>
+          <b>ForumSys</b> — LDAP test public (ldap.forumsys.com).
+        </div>
+        <div class="card2 p-3">
+          <div class="h-title mb-1">Stack Authway</div>
+          <b>Zitadel</b> — IdP self-host (Go, AGPL). OIDC/SAML/LDAP-IdP.<br/>
+          <b>oauth2-proxy</b> — IAP sidecar, OIDC client.<br/>
+          <b>Traefik</b> — reverse proxy + TLS termination.
+        </div>
+        <div class="card2 p-3">
+          <div class="h-title mb-1">Thuật ngữ khác</div>
+          <b>Bind</b> — hành động "login" vào LDAP.<br/>
+          <b>Filter</b> — biểu thức search LDAP, ví dụ <code>(uid=alice)</code>.<br/>
+          <b>objectClass</b> — schema xác định attr nào hợp lệ cho entry.<br/>
+          <b>memberOf</b> — attr chứa DN group user thuộc.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1. BASICS -->
+  <section id="basics" class="anchor mt-10">
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-lg font-semibold"><span class="step-num">1</span> &nbsp;LDAP cơ bản trong 60 giây</h2>
+      <span class="mut text-xs">Trước khi vào Zitadel</span>
+    </div>
+    <div class="grid grid-cols-2 gap-4 mt-3">
+      <div class="card p-5">
+        <div class="h-title mb-2">Anatomy · DN &amp; entry (Zimbra dạng thật)</div>
+<pre>dn: uid=nguyenvana,ou=people,dc=zimbra8815,dc=inet,dc=name,dc=vn
+objectClass: inetOrgPerson
+objectClass: zimbraAccount
+uid: nguyenvana
+cn: Nguyen Van A
+givenName: Van A
+sn: Nguyen
+mail: nguyenvana@inet.vn
+userPassword: {SSHA512}xxxxx
+zimbraAccountStatus: active
+zimbraMailHost: mail.zimbra8815.inet.name.vn</pre>
+        <p class="mut text-xs mt-2">Zimbra tự lưu user trong OpenLDAP nội bộ (<code>/opt/zimbra/data/ldap</code>). <code>zimbraAccount</code> là objectClass mở rộng của Zimbra thêm attribute mail-specific.</p>
+      </div>
+      <div class="card p-5">
+        <div class="h-title mb-2">Auth flow (simple bind)</div>
+        <div class="mermaid">
+sequenceDiagram
+  autonumber
+  participant App
+  participant LDAP as LDAP server
+  App->>LDAP: BIND uid=svc,dc=inet,dc=vn (svc pw)
+  LDAP-->>App: OK
+  App->>LDAP: SEARCH base=ou=people, filter=(uid=alice)
+  LDAP-->>App: dn=uid=alice,ou=people,dc=inet,dc=vn
+  App->>LDAP: BIND that dn + alice's pw
+  LDAP-->>App: OK / INVALID
+        </div>
+        <p class="mut text-xs mt-2">Pattern: <b>service bind → search DN → bind lại bằng pw user</b>. Không token, session tự app quản.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. MATRIX -->
+  <section id="matrix" class="anchor mt-10">
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-lg font-semibold"><span class="step-num">2</span> &nbsp;Zitadel &times; LDAP · ma trận hỗ trợ</h2>
+      <span class="mut text-xs">Hai chiều khác nhau, đừng nhầm</span>
+    </div>
+    <div class="grid grid-cols-2 gap-4 mt-3">
+      <div class="card box-ok p-5">
+        <div class="flex items-center gap-2"><span class="pill lime">CHIỀU A · ✅ GA</span></div>
+        <h3 class="text-base font-semibold mt-2">LDAP làm <span class="ok">Identity Provider</span> của Zitadel</h3>
+        <p class="text-[13px] mut mt-2">User gõ URL app → oauth2-proxy → Zitadel login page → user chọn "Login with LDAP" → Zitadel bind vào AD/OpenLDAP verify → JIT tạo user trong Zitadel → phát OIDC token cho app.</p>
+        <ul class="text-[13px] mt-3 space-y-1">
+          <li>🎯 Use case: team đã có AD/LDAP, không muốn tạo lại password store</li>
+          <li>🔒 Self-hosted Zitadel only (Cloud Zitadel bị chặn)</li>
+          <li>🧬 JIT provisioning hoặc account linking</li>
+          <li>🔁 One-way: LDAP → Zitadel copy attribute lúc login. Không write-back.</li>
+        </ul>
+      </div>
+      <div class="card box-err p-5">
+        <div class="flex items-center gap-2"><span class="pill red">CHIỀU B · ❌ KHÔNG hỗ trợ</span></div>
+        <h3 class="text-base font-semibold mt-2">Zitadel làm <span class="err">LDAP Server</span> cho legacy app</h3>
+        <p class="text-[13px] mut mt-2">Muốn legacy app (GitLab CE cũ, Jenkins plugin, backup tool, Nextcloud, MediaWiki, SonarQube phiên bản LDAP-only...) bind vào Zitadel qua LDAP protocol → <b class="err">không được</b>.</p>
+        <ul class="text-[13px] mt-3 space-y-1">
+          <li>🚫 Request từ 2020 (<a class="acc" href="https://github.com/zitadel/zitadel/discussions/1929" target="_blank">discussion #1929</a>) — team Zitadel không có capacity</li>
+          <li>🛠️ Workaround: chạy LDAP bridge (GlAuth, lldap) trước Zitadel, hoặc migrate app sang OIDC</li>
+          <li>💡 90% app "hiện đại" đều có mode OIDC → thử enable trước khi nghĩ tới bridge</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. IDP -->
+  <section id="idp" class="anchor mt-10">
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-lg font-semibold"><span class="step-num">3</span> &nbsp;Chiều A · LDAP as IdP · flow chi tiết</h2>
+      <span class="mut text-xs"><a class="acc" href="https://zitadel.com/docs/guides/integrate/identity-providers/ldap" target="_blank">zitadel.com/docs/.../ldap</a></span>
+    </div>
+    <div class="card p-5 mt-3">
+      <div class="mermaid">
+flowchart LR
+  U["👤 User<br/>(nguyenvana@inet.vn)"]
+  APP["app-vps<br/>(protected app)"]
+  OP["oauth2-proxy"]
+  Z["zitadel<br/>login page"]
+  ZL["zitadel LDAP<br/>connector"]
+  ZB[("🏢 Zimbra OpenLDAP<br/>mail.zimbra8815.inet.name.vn<br/>103.57.220.98:389/636")]
+  PG[("postgres<br/>zitadel users")]
+  U --> APP
+  APP --> OP
+  OP -->|"302 to /oauth/authorize"| Z
+  Z -->|"user picks 'Login with Zimbra LDAP'"| ZL
+  ZL -->|"1. bind svc account<br/>uid=zimbra,cn=admins,cn=zimbra"| ZB
+  ZL -->|"2. search filter<br/>(|(uid=nguyenvana)(mail=nguyenvana@*))"| ZB
+  ZL -->|"3. bind DN vừa tìm + user pw"| ZB
+  ZB -->|"OK + attrs: uid,mail,givenName,sn,cn"| ZL
+  ZL -->|"JIT create/update"| PG
+  Z -->|"OIDC id_token"| OP
+  OP -->|"X-Auth-Request-Email"| APP
+      </div>
+      <div class="grid grid-cols-3 gap-3 mt-4 text-[12px]">
+        <div class="card2 p-3"><div class="h-title mb-1">① Redirect</div>User truy cập app → oauth2-proxy thấy chưa auth → đá về Zitadel <code>/oauth/authorize</code>. Zitadel show login form với option "Zimbra LDAP".</div>
+        <div class="card2 p-3"><div class="h-title mb-1">② Bind kép</div>Zitadel bind service account (Bind DN + Bind Pass) → search user bằng filter → bind lại DN đó với password user nhập. Password KHÔNG bao giờ lưu ở Zitadel.</div>
+        <div class="card2 p-3"><div class="h-title mb-1">③ JIT + Token</div>User chưa có → auto-create trong Zitadel DB, map attr. Có rồi → update. Zitadel phát <code>id_token</code> JWT cho oauth2-proxy → set cookie session cho app.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. SERVER MODE -->
+  <section id="server" class="anchor mt-10">
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-lg font-semibold"><span class="step-num">4</span> &nbsp;Chiều B · Nếu bắt buộc cần Zitadel-as-LDAP</h2>
+      <span class="mut text-xs">Workaround bằng bridge</span>
+    </div>
+    <div class="grid grid-cols-2 gap-4 mt-3">
+      <div class="card p-5">
+        <div class="h-title mb-2">Option 1 · GlAuth / lldap bridge</div>
+        <p class="text-[13px] mut">Chạy 1 container LDAP nhỏ (GlAuth, lldap) làm "shadow directory", đồng bộ user từ Zitadel qua Management API. Legacy app bind vào bridge; bridge không tự verify password mà proxy về Zitadel (khó — vì Zitadel không expose password verify endpoint).</p>
+        <p class="text-[13px] warn mt-2">⚠️ Thực tế phải duplicate user + password store — mất ý nghĩa "SSO". Chỉ dùng nếu số app kẹt &lt; 3.</p>
+      </div>
+      <div class="card p-5">
+        <div class="h-title mb-2">Option 2 · Migrate app sang OIDC</div>
+        <p class="text-[13px] mut">Ưu tiên. Hầu hết app phổ biến (GitLab, Jenkins, Nextcloud, Grafana, Vault, Argo CD, Harbor, Gitea) đều có OIDC/OAuth2 built-in hoặc plugin. Migrate 1 lần, hết đau đầu.</p>
+        <p class="text-[13px] ok mt-2">✅ Khớp với triết lý Authway: "1 app = 1 OIDC client".</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. CONFIG -->
+  <section id="config" class="anchor mt-10">
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-lg font-semibold"><span class="step-num">5</span> &nbsp;Config example · Add LDAP IdP vào Zitadel</h2>
+      <span class="mut text-xs">Zitadel Console → Instance → Identity Providers</span>
+    </div>
+    <div class="grid grid-cols-[1.2fr_1fr] gap-4 mt-3">
+      <div class="card p-5">
+        <div class="h-title mb-2">Fields chính · Zimbra values</div>
+        <table class="k">
+          <tr><th>Field</th><th>Value</th></tr>
+          <tr><td>Servers</td><td><code>ldaps://mail.zimbra8815.inet.name.vn:636</code><br/><span class="mut text-[11px]">fallback: <code>ldap://...:389</code> + StartTLS</span></td></tr>
+          <tr><td>StartTLS</td><td><code>true</code> nếu dùng :389; <code>false</code> nếu :636</td></tr>
+          <tr><td>BaseDN</td><td><code>dc=zimbra8815,dc=inet,dc=name,dc=vn</code><br/><span class="mut text-[11px]">(sẽ verify bằng slapcat sau)</span></td></tr>
+          <tr><td>Bind DN</td><td><code>uid=zimbra,cn=admins,cn=zimbra</code></td></tr>
+          <tr><td>Bind Password</td><td>lấy bằng <code>zmlocalconfig -s zimbra_ldap_password</code></td></tr>
+          <tr><td>User Object Class</td><td><code>inetOrgPerson</code> (kèm <code>zimbraAccount</code>)</td></tr>
+          <tr><td>User Filters</td><td><code>uid</code>, <code>mail</code></td></tr>
+          <tr><td>Active filter</td><td><code>(zimbraAccountStatus=active)</code> ← khuyến nghị thêm</td></tr>
+          <tr><td>Timeout</td><td><code>30s</code></td></tr>
+        </table>
+      </div>
+      <div class="card p-5">
+        <div class="h-title mb-2">Attribute mapping (Zimbra → Zitadel)</div>
+        <table class="k">
+          <tr><th>Zitadel field</th><th>Zimbra LDAP attr</th></tr>
+          <tr><td>ID</td><td><code>uid</code></td></tr>
+          <tr><td>Username</td><td><code>uid</code></td></tr>
+          <tr><td>Email</td><td><code>mail</code></td></tr>
+          <tr><td>Email verified</td><td>(hardcode true)</td></tr>
+          <tr><td>First name</td><td><code>givenName</code></td></tr>
+          <tr><td>Last name</td><td><code>sn</code></td></tr>
+          <tr><td>Display name</td><td><code>cn</code> hoặc <code>displayName</code></td></tr>
+          <tr><td>Phone</td><td><code>telephoneNumber</code> (optional)</td></tr>
+        </table>
+        <p class="text-[12px] mut mt-3">Options: ☑ <b>Auto register</b> (JIT) · ☑ <b>Account linking</b> · ☑ <b>Auto update</b> (sync attr mỗi login).</p>
+      </div>
+    </div>
+
+    <!-- CLI verify block -->
+    <div class="card p-5 mt-4">
+      <div class="h-title mb-2">Verify bằng ldapsearch trước khi config Zitadel</div>
+<pre># Test bind service account từ Authway VPS (hoặc từ chính Zimbra):
+ldapsearch -H ldap://103.57.220.98:389 -x -ZZ \
+  -D "uid=zimbra,cn=admins,cn=zimbra" \
+  -w "$ZIMBRA_LDAP_PASS" \
+  -b "dc=zimbra8815,dc=inet,dc=name,dc=vn" \
+  "(uid=nguyenvana)" \
+  uid mail givenName sn cn zimbraAccountStatus
+
+# Test bind bằng chính user (verify password):
+ldapsearch -H ldap://103.57.220.98:389 -x -ZZ \
+  -D "uid=nguyenvana,ou=people,dc=zimbra8815,dc=inet,dc=name,dc=vn" \
+  -w "user_password" -b "" -s base "(objectclass=*)"
+# → thành công = credential đúng, Zitadel sẽ làm chính xác 2 lệnh này khi user login.</pre>
+    </div>
+  </section>
+
+  <!-- 6. AUTHWAY APPLY -->
+  <section id="authway" class="anchor mt-10">
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-lg font-semibold"><span class="step-num">6</span> &nbsp;Áp dụng cho Authway · Zimbra scenario</h2>
+      <span class="mut text-xs">Real target: mail.zimbra8815.inet.name.vn</span>
+    </div>
+    <div class="grid grid-cols-3 gap-3 mt-3">
+      <div class="card p-4 box-ok">
+        <div class="pill lime">MAIN USE CASE</div>
+        <div class="font-semibold mt-2 text-[14px]">Zimbra mail users → login Authway</div>
+        <p class="text-[12px] mut mt-2">Mọi email account trong Zimbra (VD <code>nguyenvana@inet.vn</code>) tự động login được Authway. Không cần tạo user thủ công. Password vẫn ở Zimbra, đổi trong Zimbra là có hiệu lực ngay.</p>
+        <div class="mt-2"><span class="pill lime">Đang test</span></div>
+      </div>
+      <div class="card p-4">
+        <div class="pill cyan">SIDE EFFECT +</div>
+        <div class="font-semibold mt-2 text-[14px]">Off-board 1 chỗ</div>
+        <p class="text-[12px] mut mt-2">Xoá/disable mail Zimbra → mất access mọi app phía sau Authway (Grafana, GitLab, wiki...). Không phải deactivate ở 10 chỗ.</p>
+        <div class="mt-2"><span class="pill vio">Cần thêm cron sync</span></div>
+      </div>
+      <div class="card p-4">
+        <div class="pill amber">CAVEAT</div>
+        <div class="font-semibold mt-2 text-[14px]">Zimbra password policy</div>
+        <p class="text-[12px] mut mt-2">Zimbra self-hosted policy (min length, expiry, lockout) sẽ apply. Zitadel MFA (passkey/TOTP) vẫn có thể enforce thêm lớp trên top. Xem xét bỏ MFA của Zimbra để tránh double.</p>
+        <div class="mt-2"><span class="pill amber">Chọn 1 layer MFA</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6b. WORKFLOW STEP-BY-STEP -->
+  <section id="workflow" class="anchor mt-10">
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-lg font-semibold"><span class="step-num">6+</span> &nbsp;Workflow cấu hình end-to-end</h2>
+      <span class="mut text-xs">7 bước · Zimbra recon → Zitadel config → verify</span>
+    </div>
+
+    <!-- Big flowchart -->
+    <div class="card p-5 mt-3">
+      <div class="mermaid">
+flowchart TD
+  subgraph Z["🟣 Trên Zimbra server (SSH root@103.57.220.98:24700)"]
+    Z1["① Recon LDAP config<br/>zmlocalconfig ldap_url, ldap_port<br/>zmlocalconfig -s zimbra_ldap_password"]
+    Z2["② Lấy BaseDN thật<br/>ldapsearch -x -H ldap://localhost -s base -b '' namingContexts"]
+    Z3["③ Test bind + search local<br/>ldapsearch với bind DN admin"]
+    Z4["④ Mở firewall port 389/636<br/>ra IP Authway VPS<br/>(và cân nhắc bật LDAPS)"]
+    Z5["⑤ Export CA cert<br/>/opt/zimbra/conf/ca/ca.pem<br/>copy sang Authway container"]
+  end
+  subgraph A["🟢 Trên Authway VPS (Zitadel host)"]
+    A1["⑥ Verify từ xa<br/>ldapsearch -H ldap://103.57.220.98:389<br/>từ Authway VPS"]
+    A2["⑦ Zitadel Console<br/>→ Instance/Org → Identity Providers<br/>→ Add LDAP"]
+    A3["⑧ Điền config + attribute mapping<br/>Enable Auto Register + Auto Update"]
+    A4["⑨ Activate IdP<br/>+ Login Policy: allow external IdP"]
+    A5["⑩ Test login user Zimbra thật<br/>Verify JIT tạo user Zitadel + OIDC token"]
+  end
+  Z1 --> Z2 --> Z3 --> Z4 --> Z5 --> A1 --> A2 --> A3 --> A4 --> A5
+  A5 -.->|"nếu lỗi cert"| Z5
+  A5 -.->|"nếu bind fail"| Z3
+
+  style Z1 fill:#1f1a3a,stroke:#3b3576,color:#fff
+  style Z2 fill:#1f1a3a,stroke:#3b3576,color:#fff
+  style Z3 fill:#1f1a3a,stroke:#3b3576,color:#fff
+  style Z4 fill:#1f1a3a,stroke:#3b3576,color:#fff
+  style Z5 fill:#1f1a3a,stroke:#3b3576,color:#fff
+  style A1 fill:#0c2a12,stroke:#2d6a2d,color:#fff
+  style A2 fill:#0c2a12,stroke:#2d6a2d,color:#fff
+  style A3 fill:#0c2a12,stroke:#2d6a2d,color:#fff
+  style A4 fill:#0c2a12,stroke:#2d6a2d,color:#fff
+  style A5 fill:#0c2a12,stroke:#2d6a2d,color:#fff
+      </div>
+    </div>
+
+    <!-- Detailed steps grid -->
+    <div class="grid grid-cols-2 gap-4 mt-4">
+      <!-- STEP 1 -->
+      <div class="card p-5">
+        <div class="flex items-center gap-2"><span class="pill vio">BƯỚC 1</span><b>Recon Zimbra LDAP config</b></div>
+        <p class="text-[12px] mut mt-2">SSH vào Zimbra, chạy dưới user zimbra để lấy config LDAP thực tế:</p>
+<pre>ssh zimbra-mail
+su - zimbra -c 'zmlocalconfig \
+  ldap_url ldap_master_url ldap_port \
+  ldap_starttls_supported ldap_common_loglevel \
+  zimbra_ldap_userdn'
+
+# Lấy password service account (SECRET):
+su - zimbra -c 'zmlocalconfig -s zimbra_ldap_password'
+
+# Xem port đang listen:
+netstat -tlnp | grep -E ':(389|636)'</pre>
+      </div>
+
+      <!-- STEP 2 -->
+      <div class="card p-5">
+        <div class="flex items-center gap-2"><span class="pill vio">BƯỚC 2</span><b>Lấy BaseDN thật &amp; sample user</b></div>
+        <p class="text-[12px] mut mt-2">Dùng chính LDAP để tự khám phá schema:</p>
+<pre># BaseDN (namingContexts):
+ldapsearch -x -H ldap://localhost:389 -s base -b "" namingContexts
+
+# List 5 user đầu:
+ldapsearch -x -H ldap://localhost:389 \
+  -D "uid=zimbra,cn=admins,cn=zimbra" \
+  -w "$(su - zimbra -c 'zmlocalconfig -s zimbra_ldap_password' | cut -d= -f2 | xargs)" \
+  -b "" -s sub \
+  "(objectClass=zimbraAccount)" \
+  uid mail givenName sn cn zimbraAccountStatus | head -60</pre>
+      </div>
+
+      <!-- STEP 3 -->
+      <div class="card p-5">
+        <div class="flex items-center gap-2"><span class="pill vio">BƯỚC 3</span><b>Verify bind DN + password local</b></div>
+        <p class="text-[12px] mut mt-2">Đảm bảo service account bind được:</p>
+<pre># Bind thành công = có quyền search:
+ldapsearch -x -H ldap://localhost:389 \
+  -D "uid=zimbra,cn=admins,cn=zimbra" \
+  -w "$ZIMBRA_LDAP_PASS" \
+  -b "" -s base "(objectclass=*)" | head -10
+
+# Nếu ra error 49 (Invalid credentials) → sai bind DN/password
+# Nếu ok → OK có thể qua bước mở firewall</pre>
+      </div>
+
+      <!-- STEP 4 -->
+      <div class="card p-5">
+        <div class="flex items-center gap-2"><span class="pill vio">BƯỚC 4</span><b>Mở LDAP port ra Authway VPS</b></div>
+        <p class="text-[12px] mut mt-2">Mặc định Zimbra chỉ listen 127.0.0.1. Có 2 option:</p>
+        <ul class="text-[12px] mut mt-2 space-y-1 list-disc pl-4">
+          <li><b>Option A (đơn giản):</b> SSH tunnel từ Authway VPS <code>ssh -L 3389:localhost:389 zimbra-mail</code> → Zitadel bind vào <code>ldap://localhost:3389</code>. Dev/test OK.</li>
+          <li><b>Option B (prod):</b> Bind slapd trên 0.0.0.0, restrict firewall (<code>ufw allow from &lt;authway_ip&gt; to any port 636</code>), bật LDAPS proper.</li>
+        </ul>
+<pre># Firewall Zimbra (nếu Option B):
+ufw allow from $AUTHWAY_VPS_IP to any port 636 proto tcp
+ufw allow from $AUTHWAY_VPS_IP to any port 389 proto tcp</pre>
+      </div>
+
+      <!-- STEP 5 -->
+      <div class="card p-5">
+        <div class="flex items-center gap-2"><span class="pill vio">BƯỚC 5</span><b>Export CA cert cho LDAPS</b></div>
+        <p class="text-[12px] mut mt-2">Zimbra tự sinh cert self-signed → Zitadel sẽ reject. Copy CA:</p>
+<pre># Trên Zimbra:
+cat /opt/zimbra/conf/ca/ca.pem
+
+# Trên Authway host (nơi chạy Zitadel container):
+scp zimbra-mail:/opt/zimbra/conf/ca/ca.pem \
+    /etc/docker/certs/zimbra-ca.crt
+
+# docker-compose.yml của Zitadel:
+volumes:
+  - /etc/docker/certs/zimbra-ca.crt:/etc/ssl/certs/zimbra-ca.crt:ro
+# → restart zitadel container để reload CA store</pre>
+      </div>
+
+      <!-- STEP 6 -->
+      <div class="card p-5">
+        <div class="flex items-center gap-2"><span class="pill lime">BƯỚC 6</span><b>Verify từ Authway VPS</b></div>
+        <p class="text-[12px] mut mt-2">Đứng từ máy Authway ping thử LDAP Zimbra trước khi vào UI:</p>
+<pre># Từ Authway VPS:
+apt install -y ldap-utils
+ldapsearch -H ldap://103.57.220.98:389 -x -ZZ \
+  -D "uid=zimbra,cn=admins,cn=zimbra" \
+  -w "$ZIMBRA_LDAP_PASS" \
+  -b "dc=zimbra8815,dc=inet,dc=name,dc=vn" \
+  "(uid=nguyenvana)" \
+  uid mail givenName sn cn
+
+# Nếu ok → sang bước Zitadel Console
+# Nếu timeout → firewall chưa mở
+# Nếu error 49 → sai password</pre>
+      </div>
+
+      <!-- STEP 7 -->
+      <div class="card p-5">
+        <div class="flex items-center gap-2"><span class="pill lime">BƯỚC 7</span><b>Add LDAP IdP trong Zitadel Console</b></div>
+        <p class="text-[12px] mut mt-2">Vào <code>https://authway.inet.vn/ui/console</code> → chọn Instance (hoặc Org) → <b>Identity Providers</b> → <b>+ New</b> → <b>Active Directory / LDAP</b>. Điền theo section 5 phía trên. Chú ý:</p>
+        <ul class="text-[12px] mut mt-2 space-y-1 list-disc pl-4">
+          <li>Bật <b>Auto Register</b> để JIT tạo user.</li>
+          <li>Bật <b>Auto Update</b> để mỗi lần login refresh givenName/sn/cn từ Zimbra.</li>
+          <li>Có thể enable <b>Account Linking</b> để user đã tồn tại (nếu từng tạo native) sẽ được gộp.</li>
+          <li>Save → click nút <b>Activate</b> ở góc phải (mặc định inactive).</li>
+        </ul>
+      </div>
+
+      <!-- STEP 8 -->
+      <div class="card p-5">
+        <div class="flex items-center gap-2"><span class="pill lime">BƯỚC 8</span><b>Login Policy · cho phép external IdP</b></div>
+        <p class="text-[12px] mut mt-2">Instance/Org settings → <b>Login Policy</b>:</p>
+        <ul class="text-[12px] mut mt-2 space-y-1 list-disc pl-4">
+          <li>☑ <b>Allow external identity providers</b></li>
+          <li>Section <b>Identity Providers</b> → thêm <code>Zimbra LDAP</code> vào list "shown on login page"</li>
+          <li>Nếu muốn user CHỈ login qua Zimbra → tắt <b>Username Password Allowed</b> (cẩn thận: mất admin native)</li>
+        </ul>
+      </div>
+
+      <!-- STEP 9 -->
+      <div class="card p-5">
+        <div class="flex items-center gap-2"><span class="pill lime">BƯỚC 9</span><b>Test end-to-end</b></div>
+        <p class="text-[12px] mut mt-2">Mở private/incognito → truy cập 1 app phía sau Authway:</p>
+        <ol class="text-[12px] mut mt-2 space-y-1 list-decimal pl-4">
+          <li>Bị redirect về <code>authway.inet.vn/ui/login</code></li>
+          <li>Thấy nút "Login with Zimbra LDAP" → click</li>
+          <li>Nhập <code>nguyenvana</code> (hoặc email <code>nguyenvana@inet.vn</code>) + password Zimbra</li>
+          <li>Redirect về app → login xong</li>
+          <li>Check Zitadel Console → Users → thấy user mới auto-created, kèm <code>Login name: nguyenvana@ldap.inet.vn</code></li>
+        </ol>
+      </div>
+
+      <!-- STEP 10 -->
+      <div class="card p-5 box-warn">
+        <div class="flex items-center gap-2"><span class="pill amber">BƯỚC 10</span><b>Debug khi fail</b></div>
+        <ul class="text-[12px] mut mt-2 space-y-1 list-disc pl-4">
+          <li><b>Zitadel logs:</b> <code>docker logs -f zitadel</code> hoặc <code>journalctl -u zitadel -f</code> → tìm dòng có <code>ldap</code>.</li>
+          <li><b>Zimbra slapd logs:</b> <code>tail -f /opt/zimbra/log/ldap.log</code> → thấy bind request từ IP Authway.</li>
+          <li><b>Cert issue:</b> báo <code>x509: certificate signed by unknown authority</code> → CA chưa mount đúng, xem lại bước 5.</li>
+          <li><b>Bind fail:</b> báo <code>invalid credentials</code> → sai password, chạy lại bước 1 lấy password.</li>
+          <li><b>User not found:</b> filter sai, thử đổi <code>(|(uid=%v)(mail=%v))</code> hoặc kiểm tra BaseDN.</li>
+          <li><b>JIT không tạo:</b> attribute mapping thiếu email → phải bật auto register + đủ 4 field email/username/first/last.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. GOTCHAS -->
+  <section id="gotchas" class="anchor mt-10">
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-lg font-semibold"><span class="step-num">7</span> &nbsp;Gotchas &amp; limitations</h2>
+      <span class="mut text-xs">Đọc trước khi commit</span>
+    </div>
+    <div class="card p-5 mt-3">
+      <table class="k">
+        <tr><th>Vấn đề</th><th>Chi tiết</th><th>Cách né</th></tr>
+        <tr>
+          <td><span class="pill red">Cloud blocked</span></td>
+          <td>Zitadel Cloud không cho LDAP IdP (network access issue)</td>
+          <td>Authway self-host → OK</td>
+        </tr>
+        <tr>
+          <td><span class="pill amber">Cert self-signed</span></td>
+          <td>Một số version Zitadel bug khi verify LDAPS cert self-signed</td>
+          <td>Dùng CA proper (mkcert / step-ca) hoặc downgrade cẩn thận</td>
+        </tr>
+        <tr>
+          <td><span class="pill amber">Plain LDAP :389</span></td>
+          <td>Không encrypted, password bay trong subnet</td>
+          <td>Bắt buộc LDAPS :636 hoặc StartTLS trong production</td>
+        </tr>
+        <tr>
+          <td><span class="pill red">No realtime sync</span></td>
+          <td>Disable user ở AD → Zitadel không biết ngay, chỉ chặn login lần sau</td>
+          <td>Script cron kiểm tra + disable qua Management API, hoặc dùng short session</td>
+        </tr>
+        <tr>
+          <td><span class="pill red">One-way copy</span></td>
+          <td>Đổi tên/email trong Zitadel không sync ngược về LDAP</td>
+          <td>AD/LDAP là source of truth; sửa ở đó</td>
+        </tr>
+        <tr>
+          <td><span class="pill amber">Group mapping</span></td>
+          <td>Zitadel không auto map <code>memberOf</code> sang project role</td>
+          <td>Dùng Actions (script custom) hoặc set role manual</td>
+        </tr>
+        <tr>
+          <td><span class="pill amber">MFA double</span></td>
+          <td>Nếu AD đã có MFA + Zitadel cũng enforce → user MFA 2 lần</td>
+          <td>Chọn 1 layer, thường Zitadel (passkey UX tốt hơn)</td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- 8. DECISION -->
+  <section id="decision" class="anchor mt-10">
+    <div class="flex items-baseline justify-between">
+      <h2 class="text-lg font-semibold"><span class="step-num">8</span> &nbsp;Decision · có nên adopt LDAP cho Authway?</h2>
+      <span class="mut text-xs">Nguyên tắc: YAGNI</span>
+    </div>
+    <div class="card box-warn p-5 mt-3">
+      <div class="mermaid">
+flowchart TD
+  Q1{"Team đã có AD/LDAP<br/>đang chạy sẵn?"}
+  Q2{"Có &gt; 10 người<br/>hoặc HR system tự động?"}
+  Q3{"Có legacy app<br/>không thể OIDC?"}
+  A["✅ Bật LDAP IdP<br/>trong Zitadel"]
+  B["⏸️ Skip · dùng native<br/>Zitadel users"]
+  C["🔧 Xét GlAuth bridge<br/>(tách khỏi Zitadel)"]
+  D["🔁 Migrate app sang OIDC"]
+  Q1 -- yes --> A
+  Q1 -- no --> Q2
+  Q2 -- yes --> A
+  Q2 -- no --> Q3
+  Q3 -- app hỗ trợ OIDC --> D
+  Q3 -- app không hỗ trợ --> C
+  Q3 -- không có --> B
+      </div>
+      <hr class="sep"/>
+      <div class="grid grid-cols-3 gap-3 text-[12px]">
+        <div class="card2 p-3">
+          <div class="pill lime">GO</div>
+          <p class="mt-2">Có AD sẵn · muốn dev login bằng domain account · muốn offboard 1 chỗ (disable AD → mất access Authway).</p>
+        </div>
+        <div class="card2 p-3">
+          <div class="pill gray">WAIT</div>
+          <p class="mt-2">Team nhỏ · chưa có directory · vibe-code chưa scale. Native Zitadel user + passkey đủ dùng.</p>
+        </div>
+        <div class="card2 p-3">
+          <div class="pill red">AVOID</div>
+          <p class="mt-2">Đặt Zitadel làm LDAP server cho app cũ → không khả thi, đừng phí time.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="mt-10 pt-5 border-t border-[#1f1f25] flex items-center justify-between text-[12px] mut">
+    <div>Authway · LDAP explainer · updated 2026-08-04 (Zimbra target)</div>
+    <div class="flex gap-3">
+      <a class="acc" href="https://zitadel.com/docs/guides/integrate/identity-providers/ldap" target="_blank">Zitadel LDAP IdP guide</a>
+      <a class="acc" href="https://github.com/zitadel/zitadel/discussions/1929" target="_blank">Discussion #1929 (LDAP server)</a>
+      <a class="acc" href="plans/reports/researcher-260716-0924-zitadel-ldap-support.md">Research report</a>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad:true,
+    theme:'base',
+    themeVariables:{
+      background:'#0e0e12',
+      primaryColor:'#15151a',
+      primaryTextColor:'#ededf0',
+      primaryBorderColor:'#2a2a30',
+      lineColor:'#4b5563',
+      secondaryColor:'#111114',
+      tertiaryColor:'#0a0a0d',
+      clusterBkg:'#0e0e12',
+      clusterBorder:'#1f1f25',
+      fontSize:'13px'
+    },
+    flowchart:{curve:'basis',padding:12},
+    sequence:{actorMargin:40,mirrorActors:false}
+  });
+</script>
+</body>
+</html>
