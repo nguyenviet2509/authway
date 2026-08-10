@@ -168,7 +168,11 @@ services:
     user: "0"
     networks: [internal, edge]
     environment:
-      ZITADEL_API_URL: http://authway-vps.local:8080
+      # ZITADEL_API_URL uses external URL (via Traefik) so login sidecar emits
+      # consistent CSP headers pointing at the same origin as the browser sees.
+      # Previously http://authway-vps.local:8080 caused broken images: browser
+      # blocked fetches from the internal alias (unresolvable from client).
+      ZITADEL_API_URL: http://${ZITADEL_EXTERNAL_DOMAIN}
       NEXT_PUBLIC_BASE_PATH: /ui/v2/login
       ZITADEL_SERVICE_USER_TOKEN_FILE: /zitadel/bootstrap/login-client.pat
       # HTTP: no X-Forwarded-Proto:https override
