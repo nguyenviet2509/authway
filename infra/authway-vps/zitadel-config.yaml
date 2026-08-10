@@ -43,8 +43,11 @@ DefaultInstance:
     AllowUsernamePassword: true
     AllowRegister: false
     AllowExternalIDP: false
-    ForceMFA: true
-    ForceMFALocalOnly: true
+    # ForceMFA disabled cho pilot HTTP — login sidecar Next.js cookie
+    # có Secure flag khi NODE_ENV=production, không giữ được session
+    # multi-page trên HTTP+IP-as-domain. Bật lại khi có domain+TLS.
+    ForceMFA: false
+    ForceMFALocalOnly: false
     HidePasswordReset: true
     AllowDomainDiscovery: false
     DisableLoginWithEmail: false

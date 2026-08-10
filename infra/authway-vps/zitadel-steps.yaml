@@ -15,4 +15,4 @@ FirstInstance:
         Verified: true
       PreferredLanguage: en
       Password: ${ZITADEL_ADMIN_PASSWORD}
-      PasswordChangeRequired: true
+      PasswordChangeRequired: false
