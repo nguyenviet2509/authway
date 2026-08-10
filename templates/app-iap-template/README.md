@@ -4,6 +4,8 @@ Template generic cho member migrate 1 app sang centralized auth qua Zitadel. Cop
 
 App **KHÔNG cần** code OIDC. oauth2-proxy handle toàn bộ. App chỉ đọc header `X-Auth-Request-Email`.
 
+**Quick start (đã có VPS + Docker):** đọc [`../../docs/app-onboarding-iap-guide.md`](../../docs/app-onboarding-iap-guide.md) — 5-step, 15 phút. README này chi tiết hơn cho lần setup đầu tiên (SSH hardening, UFW, NTP, TLS).
+
 ---
 
 ## Pre-requisites
