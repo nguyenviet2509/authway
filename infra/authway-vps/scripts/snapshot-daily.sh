@@ -44,15 +44,29 @@ echo "[snapshot] $(date -Is) start → $BACKUP_DIR"
 
 # --- 1. Postgres logical dump (Zitadel event store) ---
 # Critical: Zitadel state = postgres event store. Empty dump = restore useless.
-# Use pg_dump with --clean --if-exists so restore is idempotent (DROP then CREATE).
-echo "[1/4] pg_dump zitadel"
+#
+# TWO artifacts:
+#   a) globals.sql — CREATE ROLE + CREATE DATABASE (pg_dumpall --globals-only)
+#      + explicit CREATE DATABASE (pg_dumpall skips this by default).
+#      Restored FIRST on fresh Postgres, before the schema dump.
+#   b) zitadel.sql.gz — schema + data for `zitadel` database with --create so
+#      it includes CREATE DATABASE zitadel OWNER = ${ZITADEL_DB_USER}. Uses
+#      --clean --if-exists so restore is idempotent even if run twice.
+echo "[1/5] pg_dumpall globals (roles + tablespaces)"
 PG_CONTAINER="${PG_CONTAINER:-authway-prod-postgres-1}"
 if ! docker inspect -f '{{.State.Running}}' "$PG_CONTAINER" 2>/dev/null | grep -q true; then
   echo "[snapshot] ERROR $PG_CONTAINER not running" >&2
   exit 2
 fi
 docker exec "$PG_CONTAINER" sh -c \
-  "pg_dump -U '${POSTGRES_ADMIN_USER:-postgres}' -d zitadel --no-owner --no-privileges --clean --if-exists" \
+  "pg_dumpall -U '${POSTGRES_ADMIN_USER:-postgres}' --globals-only --clean --if-exists" \
+  > "$STAGE/globals.sql"
+GLOBALS_SIZE=$(stat -c%s "$STAGE/globals.sql")
+echo "  globals.sql size=$GLOBALS_SIZE bytes"
+
+echo "[2/5] pg_dump zitadel database"
+docker exec "$PG_CONTAINER" sh -c \
+  "pg_dump -U '${POSTGRES_ADMIN_USER:-postgres}' -d zitadel --create --clean --if-exists" \
   | gzip -9 > "$STAGE/zitadel.sql.gz"
 
 DUMP_SIZE=$(stat -c%s "$STAGE/zitadel.sql.gz")
@@ -62,10 +76,10 @@ if [[ "$DUMP_SIZE" -lt 10240 ]]; then
 fi
 echo "  zitadel.sql.gz size=$DUMP_SIZE bytes"
 
-# --- 2. Bootstrap volume (login-client PAT) ---
+# --- 3. Bootstrap volume (login-client PAT) ---
 # Contains machine-user PAT that zitadel-login sidecar uses to talk to Zitadel.
 # Docker named volume — tar via helper container that mounts it read-only.
-echo "[2/4] zitadel-bootstrap volume"
+echo "[3/5] zitadel-bootstrap volume"
 VOLUME_NAME="authway-prod_zitadel-bootstrap"
 if docker volume inspect "$VOLUME_NAME" >/dev/null 2>&1; then
   docker run --rm -v "$VOLUME_NAME:/src:ro" -v "$STAGE:/dst" alpine:3.20 \
@@ -74,7 +88,7 @@ else
   echo "  ($VOLUME_NAME missing — skipped)"
 fi
 
-# --- 3. Traefik data volume (ACME certs when HTTPS enabled) ---
+# --- Traefik data volume (ACME certs when HTTPS enabled) ---
 # HTTP pilot: volume mostly empty. Included for forward-compat when TLS lands.
 TRAEFIK_VOLUME="authway-prod_traefik-logs"
 if docker volume inspect "$TRAEFIK_VOLUME" >/dev/null 2>&1; then
@@ -82,17 +96,153 @@ if docker volume inspect "$TRAEFIK_VOLUME" >/dev/null 2>&1; then
     tar -C /src -cf /dst/traefik-logs.tar . 2>/dev/null || true
 fi
 
-# --- 4. Secrets + runtime bundle ---
-# Bundle .env + rendered runtime configs so restore on fresh VPS boots stack
-# without out-of-band secret copy. Whole archive is age-encrypted below.
-echo "[3/4] secrets + runtime bundle"
-mkdir -p "$STAGE/secrets"
+# --- 4. Static configs + secrets bundle (self-contained restore) ---
+# Bundle EVERY file needed to boot the stack on a fresh VPS without git access:
+#   configs/  = static YAML + templates + scripts + docker-compose.yml (from repo)
+#   secrets/  = .env + rendered runtime configs (contain secrets)
+# Combined size <100KB — cheap insurance against GitHub unavailability.
+echo "[4/5] configs + secrets bundle"
+mkdir -p "$STAGE/configs" "$STAGE/configs/dynamic" "$STAGE/configs/scripts" "$STAGE/secrets"
+
+# Static configs from repo (docker-compose + templates + traefik + middlewares + scripts)
+for f in docker-compose.yml traefik.yml zitadel-config.yaml zitadel-steps.yaml; do
+  [[ -f "$INFRA_DIR/$f" ]] && cp -p "$INFRA_DIR/$f" "$STAGE/configs/$f"
+done
+[[ -d "$INFRA_DIR/dynamic" ]] && cp -rp "$INFRA_DIR/dynamic/." "$STAGE/configs/dynamic/"
+[[ -d "$INFRA_DIR/scripts" ]] && cp -rp "$INFRA_DIR/scripts/." "$STAGE/configs/scripts/"
+# vector.yaml added by monitor plan 260821-1013 — include if present
+[[ -f "$INFRA_DIR/vector.yaml" ]] && cp -p "$INFRA_DIR/vector.yaml" "$STAGE/configs/vector.yaml"
+
+# Secrets + rendered runtime configs
 for f in .env zitadel-config.runtime.yaml zitadel-steps.runtime.yaml; do
   [[ -f "$INFRA_DIR/$f" ]] && cp -p "$INFRA_DIR/$f" "$STAGE/secrets/$f"
 done
 
+# --- RESTORE.md — step-by-step recovery (embedded in archive) ---
+# Operator opens this FIRST during disaster recovery. Everything needed to boot
+# a fresh VPS is either in this archive or referenced by exact command.
+cat > "$STAGE/RESTORE.md" <<'RESTORE_EOF'
+# Authway snapshot — RESTORE procedure
+
+Archive format: `authway-YYYYMMDD-HHMM.tar.gz.age` (age-encrypted).
+
+## Prerequisites on fresh VPS
+
+- Debian/Ubuntu with Docker Engine + Docker Compose plugin
+- `age` binary (`apt-get install age`)
+- Private age key on operator laptop (`~/.secrets/onelog-backup-master.key`)
+- Optional: aws cli if downloading from S3
+
+## Step 1 — Decrypt + extract
+
+```bash
+age -d -i ~/.secrets/onelog-backup-master.key authway-YYYYMMDD-HHMM.tar.gz.age \
+  | tar -xzf - -C /tmp/restore
+cd /tmp/restore
+cat MANIFEST.json    # sanity check: git_commit, image_tags, timestamp
+sha256sum -c SHA256SUMS
+```
+
+## Step 2 — Provision /opt/authway
+
+```bash
+mkdir -p /opt/authway/infra/authway-vps
+cp -r configs/. /opt/authway/infra/authway-vps/
+cp -r secrets/. /opt/authway/infra/authway-vps/
+# Verify:
+ls /opt/authway/infra/authway-vps/
+#   .env  docker-compose.yml  dynamic/  scripts/  traefik.yml
+#   vector.yaml  zitadel-config.yaml  zitadel-config.runtime.yaml
+#   zitadel-steps.yaml  zitadel-steps.runtime.yaml
+```
+
+## Step 3 — Boot Postgres ONLY + restore data
+
+```bash
+cd /opt/authway/infra/authway-vps
+docker compose up -d postgres
+sleep 10  # wait healthy
+docker compose ps postgres  # STATUS = healthy
+
+# Load env for POSTGRES_ADMIN_USER
+set -a; . .env; set +a
+
+# Load globals (CREATE ROLE zitadel + tablespaces) FIRST
+cat /tmp/restore/globals.sql | docker compose exec -T postgres \
+  psql -U "$POSTGRES_ADMIN_USER" -d postgres
+
+# Load schema+data (CREATE DATABASE zitadel included via --create flag)
+gunzip -c /tmp/restore/zitadel.sql.gz | docker compose exec -T postgres \
+  psql -U "$POSTGRES_ADMIN_USER" -d postgres
+
+# Verify counts
+docker compose exec postgres psql -U "$POSTGRES_ADMIN_USER" -d zitadel \
+  -c "SELECT count(*) FROM eventstore.events2;"
+```
+
+## Step 4 — Restore volumes (bootstrap PAT + traefik)
+
+```bash
+# Bootstrap volume (contains login-client PAT)
+docker volume create authway-prod_zitadel-bootstrap
+docker run --rm -v authway-prod_zitadel-bootstrap:/dst \
+  -v /tmp/restore:/src alpine:3.20 \
+  tar -C /dst -xf /src/zitadel-bootstrap.tar
+
+# Traefik logs volume (usually empty for HTTP pilot)
+docker volume create authway-prod_traefik-logs
+docker run --rm -v authway-prod_traefik-logs:/dst \
+  -v /tmp/restore:/src alpine:3.20 \
+  tar -C /dst -xf /src/traefik-logs.tar || true
+```
+
+## Step 5 — Boot full stack (SKIP zitadel-init/setup — data already restored)
+
+```bash
+docker compose up -d zitadel zitadel-login traefik mailhog
+sleep 30
+docker compose ps
+
+# Health check
+curl -sf http://<vps-ip>/.well-known/openid-configuration | jq .issuer
+```
+
+**Important:** Do NOT run `docker compose up -d` blindly — that will re-execute
+`zitadel-init` + `zitadel-setup` which are one-shot bootstrap. They will fail
+harmlessly (idempotent) but log noise. Compose orders them via `depends_on`
+so the safer path is to start `zitadel` directly (its `depends_on:
+zitadel-setup.condition: service_completed_successfully` may block — if so,
+temporarily comment that block, boot zitadel, then uncomment).
+
+## Step 6 — DNS + external
+
+Point `ZITADEL_EXTERNAL_DOMAIN` (from `.env`) at the new VPS IP. Verify:
+
+```bash
+curl -sf http://$ZITADEL_EXTERNAL_DOMAIN/.well-known/openid-configuration
+```
+
+## Rollback
+
+If restore fails midway, wipe and retry:
+
+```bash
+cd /opt/authway/infra/authway-vps && docker compose down -v
+docker volume rm authway-prod_postgres-data authway-prod_zitadel-bootstrap authway-prod_traefik-logs
+# Then restart from Step 3.
+```
+
+## Verify integrity
+
+```bash
+sha256sum -c SHA256SUMS   # inside extracted archive dir
+```
+
+If any line reports FAILED → archive corrupted, use previous day's snapshot.
+RESTORE_EOF
+
 # --- 5. MANIFEST + SHA256SUMS ---
-echo "[4/4] manifest + checksums"
+echo "[5/5] manifest + checksums"
 GIT_COMMIT=$(cd "$REPO_DIR" && git rev-parse HEAD 2>/dev/null || echo unknown)
 IMAGE_TAGS=$(cd "$INFRA_DIR" && docker compose config --images 2>/dev/null | sort -u | paste -sd, - || echo unknown)
 HAS_SECRETS=$([[ -f "$STAGE/secrets/.env" ]] && echo true || echo false)
