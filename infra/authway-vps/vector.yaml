@@ -13,6 +13,23 @@ sources:
     exclude_containers:
       - authway-prod-vector-1
 
+  # Host syslog — systemd, cron, kernel, dmesg. Mù hoàn toàn nếu không có:
+  # SSH intrusion → auth.log. Systemd fail → syslog. OOM → syslog kernel line.
+  # ignore_older_secs=86400 để không backfill 1 file syslog vài GB khi restart.
+  syslog_file:
+    type: file
+    include: [/var/log/syslog]
+    ignore_older_secs: 86400
+    read_from: end
+
+  # SSH auth + sudo + PAM sessions. Security audit — attacker login attempts,
+  # brute-force burst detection.
+  auth_file:
+    type: file
+    include: [/var/log/auth.log]
+    ignore_older_secs: 86400
+    read_from: end
+
 transforms:
   enrich:
     type: remap
@@ -46,10 +63,36 @@ transforms:
       del(.stream)
       del(.message)
 
+  # RFC5424 host log format: "2026-08-21T13:28:37 host service[pid]: message".
+  # Single service label "syslog" — keeps VL stream cardinality bounded (1 stream
+  # instead of one per systemd/cron/kernel/sudo/etc). Filter by _msg at query
+  # time: `host:"authway" service:"syslog" _msg:*systemd*`.
+  syslog_enrich:
+    type: remap
+    inputs: [syslog_file]
+    source: |
+      ._msg = string(.message) ?? ""
+      .host = "authway"
+      .service = "syslog"
+      del(.file)
+      del(.host_key)
+      del(.message)
+
+  auth_enrich:
+    type: remap
+    inputs: [auth_file]
+    source: |
+      ._msg = string(.message) ?? ""
+      .host = "authway"
+      .service = "auth"
+      del(.file)
+      del(.host_key)
+      del(.message)
+
 sinks:
   victorialogs:
     type: http
-    inputs: [enrich]
+    inputs: [enrich, syslog_enrich, auth_enrich]
     # `_stream_fields=host,service` — declares (host, service) as the stream
     # tuple so VMUI's Stream Fields panel groups by these AND indexes them
     # separately. Without it, VL ingests with `_stream="{}"` (empty) and

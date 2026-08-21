@@ -252,9 +252,15 @@ services:
   vector:
     image: timberio/vector:0.42.0-alpine
     restart: unless-stopped
+    # Run as root to read /var/log/syslog + /var/log/auth.log (mode 640 syslog:adm).
+    # No other file writes; container itself has no persistent state.
+    user: "0:0"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./vector.yaml:/etc/vector/vector.yaml:ro
+      # Host syslog + auth.log forwarding (plan 260821-1013 follow-up).
+      # Read-only mount — Vector only tails, never writes.
+      - /var/log:/var/log:ro
     command: ["--config", "/etc/vector/vector.yaml"]
     networks: [internal]
 
