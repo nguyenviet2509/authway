@@ -1,0 +1,61 @@
+# Authway-vps Vector agent — forward container logs → VictoriaLogs onelog-vps.
+# Plan: 260821-1013-authway-vps-monitor-integration
+# Convention: docs/observability-log-forwarding-convention.md — host="authway"
+
+sources:
+  docker:
+    type: docker_logs
+    include_containers:
+      - authway-prod-zitadel-1
+      - authway-prod-zitadel-login-1
+      - authway-prod-postgres-1
+      - authway-prod-traefik-1
+    exclude_containers:
+      - authway-prod-vector-1
+
+transforms:
+  enrich:
+    type: remap
+    inputs: [docker]
+    source: |
+      raw_msg = string(.message) ?? ""
+
+      # Parse structured JSON body if present (Zitadel emits JSON logs).
+      parsed, err = parse_json(raw_msg)
+      if err == null && is_object(parsed) {
+        . = merge(., object!(parsed))
+      }
+
+      # VL requires _msg — set from raw message body.
+      ._msg = raw_msg
+
+      # Force host label to "authway" (see host convention doc).
+      .host = "authway"
+
+      # Service label = container name without stack prefix.
+      cname = string!(.container_name)
+      cname = replace(cname, "authway-prod-", "")
+      cname = replace(cname, "-1", "")
+      .service = cname
+
+      # Drop noisy docker metadata to keep VL index lean.
+      del(.container_id)
+      del(.container_created_at)
+      del(.image)
+      del(.label)
+      del(.stream)
+      del(.message)
+
+sinks:
+  victorialogs:
+    type: http
+    inputs: [enrich]
+    uri: http://10.200.0.30:9428/insert/jsonline
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+    compression: gzip
+    request:
+      retry_attempts: 3
+      timeout_secs: 30

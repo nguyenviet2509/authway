@@ -110,6 +110,10 @@ services:
         aliases:
           - authway-vps.local
       edge: {}
+    # Expose Prometheus metrics on host private network for onelog-vps vmagent scrape.
+    # Zitadel binds :8080 internally; :2112 chosen to parallel Prometheus exporter convention.
+    ports:
+      - "10.200.0.125:2112:8080"
     command:
       - start
       - --masterkey
@@ -214,6 +218,45 @@ services:
       - ./dynamic:/etc/traefik/dynamic:ro
       - traefik-logs:/var/log/traefik
       - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # ─── Observability sidecars (plan 260821-1013-authway-vps-monitor-integration) ───
+  # Scraped by onelog-vps vmagent (10.200.0.30) over private network.
+  # All ports bound to 10.200.0.125 only — never public.
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "10.200.0.125:9100:9100"
+    networks: [internal]
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    ports:
+      # host 8081 → container 8080 (Zitadel already binds container :8080)
+      - "10.200.0.125:8081:8080"
+    networks: [internal]
+
+  vector:
+    image: timberio/vector:0.42.0-alpine
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./vector.yaml:/etc/vector/vector.yaml:ro
+    command: ["--config", "/etc/vector/vector.yaml"]
+    networks: [internal]
 
   # Mailhog for dev/test. Replace with real SMTP relay creds in Zitadel config for full prod.
   mailhog:
