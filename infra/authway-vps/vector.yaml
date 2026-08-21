@@ -50,7 +50,13 @@ sinks:
   victorialogs:
     type: http
     inputs: [enrich]
-    uri: http://10.200.0.30:9428/insert/jsonline
+    # `_stream_fields=host,service` — declares (host, service) as the stream
+    # tuple so VMUI's Stream Fields panel groups by these AND indexes them
+    # separately. Without it, VL ingests with `_stream="{}"` (empty) and
+    # host="authway" never appears in the VMUI stream field selector, even
+    # though the field exists on every event. Same pattern as OneLog's Vector
+    # (infra/vector/vector.yaml `_stream_fields: "service,host"`).
+    uri: http://10.200.0.30:9428/insert/jsonline?_stream_fields=host,service
     encoding:
       codec: json
     framing:
