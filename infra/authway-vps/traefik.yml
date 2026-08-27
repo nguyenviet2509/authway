@@ -27,6 +27,9 @@ entryPoints:
     address: ":80"
     # No redirect to HTTPS — HTTP-only for pilot phase
     # TLS deferred: when domain + cert ready, add websecure entrypoint here + ACME below
+  # Phase 4-5 IP-first review mode (locked 2026-08-25 V6): private-IP-only :8082 for central-rbac review
+  rbac-review:
+    address: ":8082"
 
 providers:
   docker:

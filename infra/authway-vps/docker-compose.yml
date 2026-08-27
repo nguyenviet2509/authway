@@ -211,6 +211,8 @@ services:
     # No DOCKER_API_VERSION override — Traefik v3.2 negotiates Docker API version automatically
     ports:
       - "80:80"
+      # Phase 4-5 IP-first review mode (V6 locked 2026-08-25): bind private IP only, not 0.0.0.0
+      - "10.200.0.125:8082:8082"
       # Dashboard only reachable via local SSH tunnel
       - "127.0.0.1:8088:8080"
     volumes:
