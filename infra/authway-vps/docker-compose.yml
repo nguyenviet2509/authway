@@ -12,6 +12,10 @@ volumes:
   # v4: shared bootstrap dir — setup writes login-client PAT, login sidecar reads
   zitadel-bootstrap:
   traefik-logs:
+  # Phase 06 central-rbac hardening: step-ca root/intermediate CA + config
+  # Root CA key MUST be Age-encrypted + backed up offline immediately after first init
+  # (Validation Session 1 Decision — reuse OneLog backup-age.pub pattern)
+  step-ca-data:
 
 services:
   postgres:
@@ -273,3 +277,38 @@ services:
     networks: [internal]
     ports:
       - "127.0.0.1:8025:8025"
+
+  # ─── Phase 06 central-rbac hardening: step-ca sidecar (mTLS PKI) ───
+  # Plan: plans/260826-1644-central-rbac-hardening-and-self-service/phase-06-security-foundation.md
+  # PoC-verified 2026-08-27 (digest a2b17872...bc8270 = step-ca 0.30.2)
+  #
+  # First-boot: auto-inits via DOCKER_STEPCA_INIT_* env vars. Reads password from
+  #   /root/.secrets/step-ca-password on host (0400, root-only), mounted via env_file.
+  # After first init: MUST backup root_ca_key via Age-encrypt + offline storage.
+  #   See docs/deployment-central-rbac-mtls.md § "Root key backup step".
+  step-ca:
+    image: smallstep/step-ca@sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270
+    restart: unless-stopped
+    networks: [internal]
+    ports:
+      # Bind only on private IP — cross-VPS callers access via 10.200.0.125:9000
+      - "10.200.0.125:9000:9000"
+    volumes:
+      - step-ca-data:/home/step
+    environment:
+      DOCKER_STEPCA_INIT_NAME: "OneLog Central RBAC CA"
+      DOCKER_STEPCA_INIT_DNS_NAMES: "step-ca,rbac.internal.local,10.200.0.125"
+      DOCKER_STEPCA_INIT_PROVISIONER_NAME: "admin"
+      # Password provided via env_file (NOT hardcoded in compose)
+      # File must exist at /root/.secrets/step-ca.env with STEP_CA_PASSWORD=...
+      # Auto-init only reads on first-boot; can be removed after init if desired.
+    env_file:
+      - /root/.secrets/step-ca.env
+    healthcheck:
+      test: ["CMD", "step", "ca", "health", "--ca-url", "https://localhost:9000", "--root", "/home/step/certs/root_ca.crt"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: journald
