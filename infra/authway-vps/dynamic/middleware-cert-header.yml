@@ -1,0 +1,57 @@
+# Traefik dynamic middleware — inject HMAC-signed X-Client-Cert-CN header.
+# Phase 06 Step 7 (Red Team Fix #3: prevent CN header spoofing).
+#
+# Chain applied to strict-mtls routes:
+#   1. strip-inbound-cert-headers — remove any client-supplied X-Client-Cert-*
+#   2. inject-cert-headers-passtls  — Traefik passTLSClientCert extracts real cert info
+#   3. sign-cert-header-forwardauth — forwardauth sidecar HMACs the CN header
+#
+# The forwardauth sidecar is a small container reading /run/secrets/cert_hmac
+# and stamping X-Client-Cert-Sig on the request. See scripts/cert-header-signer/.
+
+http:
+  middlewares:
+    # Step 1: strip inbound spoofed headers (Fix #3 requirement)
+    strip-inbound-cert-headers:
+      headers:
+        customRequestHeaders:
+          # Empty string = strip header from client request
+          X-Client-Cert-CN: ""
+          X-Client-Cert-Sig: ""
+          X-Client-Cert-Fingerprint: ""
+          X-Client-Cert-Serial: ""
+
+    # Step 2: Traefik extracts real cert info from mTLS handshake
+    inject-cert-headers-passtls:
+      passTLSClientCert:
+        pem: false
+        info:
+          notAfter: false
+          notBefore: false
+          sans: false
+          serialNumber: true
+          subject:
+            country: false
+            province: false
+            locality: false
+            organization: false
+            commonName: true
+
+    # Step 3: forwardauth to signer sidecar — adds X-Client-Cert-Sig (HMAC of CN + timestamp)
+    sign-cert-header-forwardauth:
+      forwardAuth:
+        address: "http://cert-header-signer:8090/sign"
+        authRequestHeaders:
+          - X-Forwarded-Tls-Client-Cert-Info
+        authResponseHeaders:
+          - X-Client-Cert-CN
+          - X-Client-Cert-Sig
+          - X-Client-Cert-Sig-Ts
+
+    # Compose chain for strict routes
+    mtls-chain:
+      chain:
+        middlewares:
+          - strip-inbound-cert-headers
+          - inject-cert-headers-passtls
+          - sign-cert-header-forwardauth
