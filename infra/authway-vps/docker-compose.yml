@@ -159,7 +159,13 @@ services:
       - "traefik.http.routers.zitadel.entrypoints=web"
       - "traefik.http.routers.zitadel.tls=false"
       - "traefik.http.routers.zitadel.priority=100"
-      - "traefik.http.routers.zitadel.middlewares=ratelimit-auth@file"
+      # fix-idps-scheme: Zitadel Next.js login gen success/failure URL scheme HTTPS on LAN
+      # deploy (`host.includes("localhost")` hardcode) → /idps/callback 302 Location HTTPS
+      # → browser ERR_CONNECTION_REFUSED. Rewrite Location header https → http.
+      - "traefik.http.middlewares.fix-idps-scheme.plugin.rewriteResponseHeaders.rewrites[0].header=Location"
+      - "traefik.http.middlewares.fix-idps-scheme.plugin.rewriteResponseHeaders.rewrites[0].regex=^https://${ZITADEL_EXTERNAL_DOMAIN}/"
+      - "traefik.http.middlewares.fix-idps-scheme.plugin.rewriteResponseHeaders.rewrites[0].replacement=http://${ZITADEL_EXTERNAL_DOMAIN}/"
+      - "traefik.http.routers.zitadel.middlewares=ratelimit-auth@file,fix-idps-scheme"
       - "traefik.http.services.zitadel.loadbalancer.server.port=8080"
       - "traefik.http.services.zitadel.loadbalancer.server.scheme=h2c"
     healthcheck:

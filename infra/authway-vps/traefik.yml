@@ -47,3 +47,13 @@ providers:
 #       email: admin@company.com
 #       storage: /acme/acme.json
 #       tlsChallenge: {}
+
+# Traefik plugin: rewrite response Location header for /idps/callback
+# Workaround Zitadel v4 login (Next.js) hardcoded `host.includes("localhost") ? http : https`
+# on plain-HTTP LAN deploys — GitLab/OIDC IdP callback breaks with ERR_CONNECTION_REFUSED.
+# Ref: onelog plan 260903-1330-zitadel-gitlab-idp-grafana-verify
+experimental:
+  plugins:
+    rewriteResponseHeaders:
+      moduleName: github.com/jamesmcroft/traefik-plugin-rewrite-response-headers
+      version: v1.1.2
