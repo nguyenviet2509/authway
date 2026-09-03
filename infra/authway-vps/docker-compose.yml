@@ -203,7 +203,11 @@ services:
       - "traefik.http.routers.zitadel-login.entrypoints=web"
       - "traefik.http.routers.zitadel-login.tls=false"
       - "traefik.http.routers.zitadel-login.priority=250"
-      - "traefik.http.routers.zitadel-login.middlewares=ratelimit-auth@file"
+      # strip-hsts: Zitadel v4 login container hardcodes HSTS max-age=2y + preload
+      # → Chrome cache force HTTPS upgrade → /idps/callback redirect fails ERR_CONNECTION_REFUSED
+      # on plain-HTTP deployments. Strip HSTS at Traefik until fixed upstream.
+      - "traefik.http.middlewares.strip-hsts-login.headers.customresponseheaders.Strict-Transport-Security="
+      - "traefik.http.routers.zitadel-login.middlewares=ratelimit-auth@file,strip-hsts-login"
       - "traefik.http.services.zitadel-login.loadbalancer.server.port=3000"
 
   traefik:
