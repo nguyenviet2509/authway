@@ -34,5 +34,17 @@ http:
           ipStrategy:
             depth: 0
 
+    # fix-idps-scheme: Rewrite /idps/callback response Location header
+    # https:// → http:// to workaround Zitadel v4 login (Next.js) hardcode
+    # `host.includes("localhost") ? http : https` on LAN plain-HTTP deploys.
+    # Ref: onelog plan 260903-1330-zitadel-gitlab-idp-grafana-verify phase 4
+    fix-idps-scheme:
+      plugin:
+        rewriteResponseHeaders:
+          rewrites:
+            - header: Location
+              regex: "^https://10\\.200\\.0\\.125/"
+              replacement: "http://10.200.0.125/"
+
 # NOTE: TLS options block removed — no HTTPS in pilot phase.
 # Restore when adding websecure entrypoint + cert.
