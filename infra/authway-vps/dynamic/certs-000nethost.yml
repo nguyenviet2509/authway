@@ -1,0 +1,14 @@
+# Traefik dynamic — 000nethost wildcard cert (Sectigo, valid 2026-08-06 → 2027-02-20).
+# Serves *.000nethost.com + 000nethost.com. Set as defaultCertificate so any Host
+# matching a router without cert config gets this. Manual renew required Feb 2027.
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/000nethost/fullchain.pem
+        keyFile: /etc/traefik/certs/000nethost/privkey.pem
+  certificates:
+    - certFile: /etc/traefik/certs/000nethost/fullchain.pem
+      keyFile: /etc/traefik/certs/000nethost/privkey.pem
+      stores:
+        - default

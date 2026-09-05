@@ -4,9 +4,10 @@ infra/*/*.runtime.yaml
 # Env files with real credentials — NEVER commit
 infra/*/.env
 
-# Traefik TLS artifacts (self-signed certs, ACME JSON)
+# Traefik TLS artifacts (self-signed certs, ACME JSON, purchased certs)
 infra/*/tls/
 infra/*/acme/
+infra/*/certs/
 
 # OS
 .DS_Store

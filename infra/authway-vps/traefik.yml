@@ -1,6 +1,6 @@
-# Traefik static config — authway-vps prod (HTTP-only, TLS deferred)
+# Traefik static config — authway-vps prod (HTTP + HTTPS)
 # Requires Traefik >= 3.7: Docker Engine 29+ minAPIVersion=1.40 incompatible with older Traefik Docker SDK
-# Dynamic config (middlewares) in ./dynamic/ + Docker labels
+# Dynamic config (middlewares + TLS cert) in ./dynamic/ + Docker labels
 
 global:
   checkNewVersion: false
@@ -25,8 +25,10 @@ api:
 entryPoints:
   web:
     address: ":80"
-    # No redirect to HTTPS — HTTP-only for pilot phase
-    # TLS deferred: when domain + cert ready, add websecure entrypoint here + ACME below
+    # HTTP kept for legacy VPN access + Zitadel login sidecar HTTP mode
+  # HTTPS terminated with Sectigo wildcard *.000nethost.com cert (dynamic/certs-000nethost.yml)
+  websecure:
+    address: ":443"
   # Phase 4-5 IP-first review mode (locked 2026-08-25 V6): private-IP-only :8082 for central-rbac review
   rbac-review:
     address: ":8082"
@@ -40,13 +42,8 @@ providers:
     directory: /etc/traefik/dynamic
     watch: true
 
-# TLS/ACME deferred — uncomment when domain + cert available
-# certificatesResolvers:
-#   letsencrypt:
-#     acme:
-#       email: admin@company.com
-#       storage: /acme/acme.json
-#       tlsChallenge: {}
+# Sectigo wildcard cert (manual renew Feb 2027) — see dynamic/certs-000nethost.yml
+# LE ACME deferred: 000nethost DNS provider blocks HTTP-01 challenge (memory: LE unusable)
 
 # Traefik plugin: rewrite response Location header for /idps/callback
 # Workaround Zitadel v4 login (Next.js) hardcoded `host.includes("localhost") ? http : https`
