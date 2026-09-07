@@ -9,6 +9,11 @@ Log:
 TLS:
   Enabled: false
 
+# Public external hostname (Traefik terminates TLS at 202.92.5.103 → authway-vps :443)
+ExternalDomain: ${ZITADEL_EXTERNAL_DOMAIN}
+ExternalPort: 443
+ExternalSecure: true
+
 # Database — injected via envsubst in scripts/render-config.sh
 Database:
   Postgres:

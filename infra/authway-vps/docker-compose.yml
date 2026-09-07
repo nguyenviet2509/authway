@@ -69,7 +69,7 @@ services:
       - --masterkey
       - ${ZITADEL_MASTERKEY}
       - --tlsMode
-      - disabled
+      - external
       - --config
       - /zitadel-config.yaml
       - --steps
@@ -123,7 +123,7 @@ services:
       - --masterkey
       - ${ZITADEL_MASTERKEY}
       - --tlsMode
-      - disabled
+      - external
       - --config
       - /zitadel-config.yaml
     environment:
@@ -164,10 +164,8 @@ services:
       - "traefik.http.routers.zitadel-https.tls=true"
       - "traefik.http.routers.zitadel-https.priority=100"
       - "traefik.http.routers.zitadel-https.service=zitadel"
-      - "traefik.http.routers.zitadel-https.middlewares=ratelimit-auth@file,fix-idps-scheme@file"
-      # fix-idps-scheme@file rewrites /idps/callback Location header https → http
-      # (workaround Zitadel Next.js hardcoded scheme — see dynamic/middlewares.yml)
-      - "traefik.http.routers.zitadel.middlewares=ratelimit-auth@file,fix-idps-scheme@file"
+      - "traefik.http.routers.zitadel-https.middlewares=ratelimit-auth@file"
+      - "traefik.http.routers.zitadel.middlewares=ratelimit-auth@file"
       - "traefik.http.services.zitadel.loadbalancer.server.port=8080"
       - "traefik.http.services.zitadel.loadbalancer.server.scheme=h2c"
     healthcheck:
