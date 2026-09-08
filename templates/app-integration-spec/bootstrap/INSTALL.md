@@ -49,30 +49,98 @@ openssl rand -base64 32
 # Copy output vào COOKIE_SECRET trong .env
 ```
 
-## Bước 3 — Mở AI tool trong project + prompt
+## Bước 2.5 — Pre-flight verify (2 lệnh)
+
+```bash
+# DNS check — verify domain trỏ đúng VPS anh sẽ deploy
+nslookup <APP_HOST>
+
+# Zitadel discovery reachable
+curl -sf ${OIDC_ISSUER}/.well-known/openid-configuration | head -3
+```
+
+Nếu DNS trỏ VPS khác — **STOP** và verify với admin trước. Đây là trap #3 trong `SPEC.md §11` (deploy nhầm server).
+
+## Bước 3 — Mở AI tool trong project
 
 **Claude Code:**
 ```bash
 claude
 ```
-Prompt: `Refactor project cho Authway SSO`
 
 **Cursor:**
 ```bash
 cursor .
 ```
-Chat: `Refactor project cho Authway SSO`
 
-**Windsurf / Cline / aider / Copilot:** mở project + prompt tương tự.
+**Windsurf / Cline / aider / Copilot:** mở project bình thường. AI sẽ auto-load `CLAUDE.md` (Claude Code) hoặc `AGENTS.md` (Cursor/aider/Cline) — 2 file này chứa AI Workflow 3-phase strict (Scout → Report → WAIT → Implement → Verify).
 
-AI sẽ:
-1. Auto-load `CLAUDE.md` (Claude Code) hoặc `AGENTS.md` (Cursor/aider/Cline)
-2. Đọc `.env` → verify credentials có
-3. Scout project → detect framework
-4. Chọn Pattern A hoặc B (decision tree)
-5. Refactor code + add config files
-6. Self-validate checklist
-7. Report files changed + next deploy steps
+## Bước 4 — Prompt AI (cheatsheet 6 use cases)
+
+Chọn prompt phù hợp use case. Fuzzy trigger detection — AI đọc AGENTS.md tự activate workflow khi thấy keyword `{authway/central sso/zitadel/gitlab sso/central rbac}` + verb.
+
+### 4.1 Implement SSO (default)
+> Đọc AGENTS.md và implement Authway SSO cho project này.
+> Scout stack + report plan trước khi code.
+
+### 4.2 Dry-run (scout only, KHÔNG code)
+> Đọc AGENTS.md và scout project. Chỉ report plan Authway SSO,
+> KHÔNG code. Chờ tôi duyệt trước khi implement.
+
+### 4.3 Force pattern cụ thể
+> Đọc AGENTS.md và implement Authway SSO **Pattern C**
+> (add-only, giữ nguyên auth cũ). Scout + report trước.
+
+Thay `Pattern C` bằng `Pattern A` hoặc `Pattern B` tùy nhu cầu (xem `DECISION-TREE.md`).
+
+### 4.4 Auto mode (skip confirm gate)
+> Đọc AGENTS.md và implement Authway SSO --auto.
+> Vẫn report Phase 1 inline nhưng không chờ tôi OK.
+
+### 4.5 Rollback
+> Rollback Authway SSO integration: delete feature branch,
+> reset local state, verify auth cũ intact.
+
+### 4.6 Test & Troubleshoot
+> Cho tôi E2E test checklist Authway SSO (bao gồm browser
+> hygiene + Zitadel Console verify + 6 traps SPEC.md §11).
+
+> SSO login lỗi: [paste error]. Đọc AGENTS.md + backend logs +
+> browser network tab, root-cause + đề xuất fix.
+
+## Bước 5 — Post-implementation manual steps
+
+AI xong Phase 1-2. Anh làm manual:
+
+### 5.1 Zitadel Console adjust (nếu SPA)
+
+Vào Zitadel Console → Project → Application:
+- **Configuration**: Auth Method = **None (PKCE)** + Require PKCE = ON *(Trap #1 SPEC.md §11)*
+- **URLs**: verify Redirect URI + Post Logout URI match `.env`
+- **Additional Origins**: add `https://<app-host>` (dev + prod) *(Trap #2)*
+- **Token Settings**: Add Roles To ID Token = ON, User Info Inside ID Token = ON *(Trap #6, cần cho Pattern C auto-provision)*
+
+### 5.2 Browser E2E test
+
+**BẮT BUỘC fresh incognito** để tránh Zitadel session collision *(Trap #4)*:
+- Ctrl+Shift+N (Chrome/Edge) hoặc Ctrl+Shift+P (Firefox)
+- HOẶC visit `<OIDC_ISSUER>/logout` trước khi test SSO
+
+Test flow:
+1. Vào `https://<app-host>/login`
+2. Click SSO button
+3. Zitadel login page → click **GitLab** → login GitLab
+4. Callback về app → verify vào dashboard (không double-prompt 2FA nếu Pattern C với SKIP policy)
+
+### 5.3 Deploy prod (khi ready)
+
+AI đã push feature branch. Merge master + deploy prod tuỳ workflow team:
+
+```bash
+git checkout master
+git merge --no-ff feat/authway-sso-integration
+git push origin master
+```
 
 ## Verify sau khi AI xong
 

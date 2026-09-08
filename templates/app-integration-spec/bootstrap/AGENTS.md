@@ -282,3 +282,106 @@ Sau refactor, deploy tuỳ target:
 
 **Warnings/limitations:** <nếu có>
 ```
+
+---
+
+## Pattern C — Federated Login (preserve existing auth)
+
+**When to use**: App đã có auth phức tạp (password + 2FA/Passkey + JWT rotation + local RBAC) mà member KHÔNG muốn refactor. SSO là 2nd IdP path song song, 0 dòng logic cũ bị đổi.
+
+Concrete reference: `examples/federated-login-example.md` (NestJS + Prisma + zustand example với adaptation table cho 12 stacks).
+
+### Discovery Script (AI MUST run FIRST — BEFORE any code change)
+
+1. Detect language: `ls {package.json, pyproject.toml, go.mod, Gemfile, pom.xml, *.csproj}`
+2. Detect framework: grep deps for common frameworks
+3. Detect existing auth primitive (grep-discover — DO NOT reimplement):
+   - JS: `jwt.sign`, `signInWith`, session middleware
+   - Python: `create_access_token`, `login_user`, `django.contrib.auth.login`
+   - Go: `jwt.Sign`, session store
+   - Ruby: `sign_in`, Devise helpers
+4. Detect SPA state store (nếu SPA): `zustand`, `redux`, `pinia`, `vuex`, `jotai`, `recoil`, `ngrx`
+5. REPORT stack + recommended deps + files to create/append + LoC delta
+
+## AI Workflow — MUST FOLLOW (Central SSO integration)
+
+### Trigger detection (fuzzy)
+
+Activate this workflow when member prompt contains:
+- Keywords: `{authway, central sso, zitadel, gitlab sso, central rbac}`
+- + verb: `{implement, setup, add, tich hop, refactor, integrate}`
+
+**Examples triggering workflow:**
+- "Implement Authway SSO"
+- "Add zitadel login"
+- "Tích hợp Central RBAC"
+- "Setup GitLab SSO qua Zitadel"
+- "Refactor auth qua Central"
+
+### Phase 1 — Scout & Report (READ-ONLY, DO NOT touch code)
+
+1. Read `.env` — verify `OIDC_ISSUER`, `CLIENT_ID`, `REDIRECT_URL` present
+   - Missing → tell member fill first, STOP
+2. Run Discovery Script above
+3. Select Pattern via `DECISION-TREE.md` Q0 → Q5
+4. REPORT to member (do not proceed yet):
+
+```
+Detected stack: <LANG> + <FRAMEWORK> + <AUTH_LIB> + <STATE_LIB>
+Selected pattern: <A|B|C> because <reason>
+Deps to install: <LIB1@version>, <LIB2@version>
+Files to create (new): <list>
+Files to APPEND wiring (0 logic touch): <list>
+Estimated delta: +<X> LoC / -0 LoC (Pattern C) or replace <Y> LoC (A/B)
+Rollback strategy: delete feature branch OR .env toggle SSO_ISSUER=""
+
+Proceed?
+```
+
+5. WAIT for member "OK/proceed/yes" — DO NOT touch code
+
+### Phase 2 — Implement (only after member OK)
+
+1. Git: `git checkout -b feat/authway-sso-integration` (NEVER commit master)
+2. Install deps per Phase 1 report
+3. Create new files per pattern
+4. APPEND wiring files — verify diff KHÔNG touch existing logic
+5. Build/compile check
+6. Commit + push feature branch
+7. Report MR URL
+
+### Phase 3 — Verify & Handoff
+
+1. Provide deploy steps (member executes manually — không auto-deploy prod)
+2. E2E test checklist:
+   - Fresh incognito browser (tránh Zitadel session collision)
+   - Zitadel Console verify: PKCE method + Additional Origins + Add Roles To ID Token
+   - Browser hygiene: `<OIDC_ISSUER>/logout` trước test SSO
+3. Rollback procedure documented
+
+### Safety Rules (INVIOLABLE)
+
+- **Pattern C**: NEVER modify any existing auth-related file
+- NEVER commit master directly (feature branch always)
+- NEVER install deps without member OK
+- NEVER skip Phase 1 report + WAIT
+- If uncertain → STOP + ask member, don't guess stack/pattern
+- If member says `--auto`: skip Phase 1 wait but still do Phase 1 report inline
+
+### Failure modes
+
+- Member says "no" to Phase 1 → adjust plan per feedback, re-report, wait again
+- Member says "force Pattern X" → override auto-selection
+- Discovery detects unknown framework → ASK member for guidance, don't guess
+- Existing auth uses uncommon primitive → REPORT + ask member confirm reuse strategy
+
+## Post-implementation traps checklist
+
+Sau khi cook + deploy, verify 6 traps trong `SPEC.md` §11:
+
+1. [ ] Zitadel app auth method đã đổi sang **None (PKCE)** (nếu SPA)
+2. [ ] Zitadel Additional Origins đã whitelist `https://<app-host>` (dev + prod nếu có)
+3. [ ] `nslookup <app-host>` verify DNS trỏ đúng VPS deploy
+4. [ ] Test SSO trong fresh incognito browser (tránh Zitadel session collision)
+5. [ ] SPA fetch `/auth/sso/config` runtime (không Vite hard-embed)
+6. [ ] Zitadel "Add Roles To ID Token = ON" (nếu Pattern C auto-provision)

@@ -4,7 +4,14 @@
 
 ## Quick decision
 
-Trả lời 5 câu hỏi theo thứ tự. Câu đầu tiên có "yes" quyết định pattern.
+Trả lời 6 câu hỏi theo thứ tự. Câu đầu tiên có "yes" quyết định pattern.
+
+### Q0 — App có sẵn auth logic phức tạp (password + 2FA/MFA + JWT/session + local RBAC/permissions) mà bạn KHÔNG muốn refactor?
+
+VD: enterprise app đã có JWT rotation + WebAuthn/Passkey + TOTP + fine-grained permissions per module + user DB với roles.
+
+- **Yes** → **Pattern C (Federated Login)** — SSO là 2nd IdP path song song, giữ nguyên auth cũ 100%. Add-only guarantee. Xem `examples/federated-login-example.md`.
+- **No** → Q1 (Pattern A vs B).
 
 ### Q1 — App là SPA thuần (React/Vue/Svelte, không backend riêng)?
 
@@ -54,6 +61,15 @@ VD: role có `orgId` metadata, multi-tenant, roles map → khác feature per ten
 - **Refactor delta**: ~50-100 dòng code + 1 dependency
 - **Pros**: full token access, custom claim parse, no sidecar
 - **Cons**: framework-specific code, PKCE bookkeeping, JWKS cache
+
+## Pattern C summary
+
+- **Setup**: Add SSO endpoint song song với existing auth. REUSE existing token issuance primitive
+- **App changes**: Add-only — new SSO service + controller + callback route + login button. **0 dòng logic auth cũ bị đổi**
+- **Cover**: Apps có JWT rotation + 2FA/Passkey + local RBAC muốn preserve
+- **Refactor delta**: ~350-500 dòng ADD, 0 dòng modify existing auth
+- **Pros**: rollback = delete feature branch. Zero risk phá auth cũ. Dual login path (password + SSO)
+- **Cons**: 2 auth systems song song (maintenance). User DB vẫn own permissions
 
 ---
 

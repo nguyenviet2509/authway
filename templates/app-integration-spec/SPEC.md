@@ -92,6 +92,45 @@ https://app.example.com {
 - Store session (cookie hoặc server-side)
 - Handle PKCE cho SPA / mobile (KHÔNG dùng `CLIENT_SECRET` trong browser)
 
+### Pattern C — Federated Login (add-only, preserve existing auth)
+
+**Semantics:**
+- SSO endpoint đặt SONG SONG với existing login endpoint (không thay)
+- SPA add "Login via Central SSO" button dưới password form (không thay form)
+- After successful SSO: swap Zitadel `id_token` → local token qua REUSE existing token issuance primitive
+- Existing auth code (password, 2FA, MFA, JWT rotation, RBAC) UNTOUCHED
+
+**Discovery Script (AI MUST run first — framework-agnostic):**
+
+1. Detect language: check `{package.json, pyproject.toml, go.mod, Gemfile, pom.xml, *.csproj}`
+2. Detect framework: grep deps for `{express, nest, fastapi, django, flask, gin, spring, rails, aspnet, ...}`
+3. Detect existing auth primitive: grep for `{jwt.sign, jwt.encode, create_access_token, sign_in, create_session, ...}`
+4. Detect SPA state store (nếu SPA): grep for `{zustand, redux, pinia, vuex, jotai, recoil, ngrx}`
+5. Detect auth module path convention của framework
+6. REPORT to member: `Detected {LANG} + {FRAMEWORK} + existing auth primitive: <PRIMITIVE>. Recommend deps: <LIB_LIST>. Files to create: <LIST>. Files to APPEND (0 logic touch): <LIST>. Proceed?`
+
+**App changes required (abstract — no hardcoded deps):**
+
+- Add `<SSO_SERVICE>` (new file) — verify id_token qua JWKS + lookup user local by email + REUSE `<TOKEN_ISSUANCE_PRIMITIVE>` (grep-discover từ existing code)
+- Add `<SSO_CONTROLLER>` (new file) — expose `GET /auth/sso/config` (SPA runtime fetch) + `POST /auth/sso/callback` (swap token)
+- Add `<CONFIG_LOADER>` (new file) — load 4 SSO env vars
+- APPEND `<AUTH_MODULE>` register new controller + service (0 line modified existing register)
+- APPEND `<CONFIG_FILE>` add `sso:` section (0 line modified existing config)
+- (SPA) Add `<SSO_MANAGER>` (new file) — OIDC client PKCE wrapper, runtime config fetch
+- (SPA) Add `<SSO_BUTTON>` (new component) — render dưới existing login form
+- (SPA) Add `<SSO_CALLBACK_ROUTE>` (new page) — hoàn tất PKCE + swap
+- (SPA) APPEND `<ROUTES_FILE>` add callback route (0 line modified existing routes)
+- (SPA) APPEND `<LOGIN_PAGE>` render `<SSO_BUTTON>` dưới form (0 line modified existing form)
+
+**Auto-provision policy (choose one):**
+
+- **Deny 403 + admin pre-provision** — an toàn nhất, admin control ai vào. Zero unknown user.
+- **Auto-create từ Zitadel role claim** với fail-safe 0-role → 403. Map claim `urn:zitadel:iam:org:project:roles`: role chứa "admin" → superuser flag, khác → default permissions rỗng. Admin nhớ cấp permissions chi tiết sau.
+
+**SKIP local 2FA/Passkey sau SSO** — trust Zitadel + GitLab MFA (org policy). Không double-prompt MFA.
+
+Concrete reference: `examples/federated-login-example.md`.
+
 ---
 
 ## 3. Security invariants (BẮT BUỘC — AI KHÔNG được bỏ)
@@ -192,7 +231,8 @@ Chạy TRƯỚC khi báo done:
 - KHÔNG add analytics / telemetry / third-party service không có trong requirements gốc
 - KHÔNG rewrite CSS / UI trừ khi refactor auth UI (login/logout buttons)
 - KHÔNG đổi database schema
-- KHÔNG add new dependency ngoài: OIDC library (Pattern B) + oauth2-proxy config (Pattern A)
+- KHÔNG add new dependency ngoài: OIDC library (Pattern B) + oauth2-proxy config (Pattern A) + JWKS verify library (Pattern C)
+- **Pattern C**: NEVER modify any existing auth-related file (`AuthController`/`AuthService`/`JwtStrategy`/`PasskeyService`/`TwoFactorService`/`TokenService`, SPA login form, existing session/state store). Only APPEND wiring lines.
 
 ---
 
@@ -210,11 +250,14 @@ Chạy TRƯỚC khi báo done:
 
 ---
 
-## 9. Version pinning (repro)
+## 9. Version pinning (repro — EXAMPLE stacks only)
 
-- `oauth2-proxy` v7.7.1
-- Auth.js (NextAuth v5) `^5.0.0-beta.20` — cho Next.js reference
-- `oidc-client-ts` `^3.0.1` — cho SPA reference
+> **Framework-agnostic note:** Versions dưới đây chỉ apply cho SPECIFIC EXAMPLE files. For YOUR stack, dùng Discovery Script (§2.5 Pattern C hoặc bootstrap CLAUDE.md/AGENTS.md) — AI recommends equivalents based on detected language/framework. Hardcoded versions here are for reference implementations only, KHÔNG bắt buộc cho stack khác.
+
+- `oauth2-proxy` v7.7.1 — Pattern A sidecar reference
+- Auth.js (NextAuth v5) `^5.0.0-beta.20` — Next.js reference example
+- `oidc-client-ts` `^3.0.1` — React/Vanilla SPA reference example
+- `jose` `^5` — Node JWKS verify (Pattern C NestJS example)
 - Node `>=20` (Auth.js v5 requirement)
 - Python `>=3.11` (FastAPI reference)
 
@@ -222,26 +265,52 @@ Nếu framework project version khác major, AI adapt syntax nhưng giữ securi
 
 ---
 
-## 10. Prompt gợi ý cho member
+## 10. Prompt cheatsheet cho member
 
-Copy đoạn dưới paste vào Claude/Cursor cùng file spec:
+Xem `bootstrap/INSTALL.md` — 6-prompt cheatsheet (Implement / Dry-run / Force Pattern / Auto mode / Rollback / Test-troubleshoot) là **source of truth** cho member prompts. AI reads `bootstrap/{CLAUDE,AGENTS}.md` để biết trigger detection + AI Workflow 3-phase strict (Scout → Report → WAIT → Implement → Verify).
 
+---
+
+## 11. Common Traps (rút từ real implementations)
+
+### Trap 1 — Central RBAC wizard tạo BASIC auth, không PKCE
+
+Wizard `POST /v1/admin/apps` mặc định set `authMethodType: OIDC_AUTH_METHOD_TYPE_BASIC` (confidential client với `client_secret`). Zitadel sẽ REJECT SPA PKCE flow không có secret.
+
+**Fix**: Sau khi wizard done, vào Zitadel Console → Project → Application → **Configuration** → đổi Auth Method sang **None (PKCE)** + enable **Require Proof Key for Code Exchange**.
+
+### Trap 2 — CORS "Additional Origins" chưa whitelist
+
+SPA PKCE call token endpoint từ browser → Zitadel CORS block nếu origin chưa được whitelist.
+
+**Fix**: Zitadel Console → Application → **Additional Origins** → add `https://<app-host>` (cả dev + prod domain nếu có).
+
+### Trap 3 — DNS mismatch giữa deploy target và domain
+
+Deploy code lên VPS A nhưng domain trỏ VPS B → code mới không có hiệu lực trên public URL.
+
+**Verify TRƯỚC deploy:**
+```bash
+nslookup <APP_HOST>
+# So sánh với IP VPS mình đang SSH
 ```
-Tôi có project [framework] tại [path]. Nhiệm vụ: refactor để integrate Central SSO.
 
-Credential từ admin:
-- OIDC_ISSUER: <value>
-- CLIENT_ID: <value>
-- CLIENT_SECRET: <value>  (bỏ nếu SPA)
-- REDIRECT_URL: <value>
-- POST_LOGOUT_URL: <value>
+### Trap 4 — Zitadel session collision khi test
 
-Bước làm:
-1. Đọc DECISION-TREE.md → chọn Pattern A hoặc B
-2. Đọc SPEC.md → hiểu contract + security invariants
-3. Đọc examples/<framework gần nhất>.md → concrete pattern
-4. Scan code project → identify auth cũ cần thay
-5. Refactor + create .env.example + update .gitignore
-6. Chạy checklist section 6 SPEC.md — self-validate
-7. Report back: files changed, new deps added, env vars required, test flow
-```
+User đang login Zitadel Console (VD `admin@<zitadel-host>`) trong browser → click SSO → Zitadel reuse session → id_token trả admin identity, không phải GitLab user → 403 sai nguyên nhân.
+
+**Fix**:
+- Fresh incognito browser (Ctrl+Shift+N)
+- HOẶC visit `<OIDC_ISSUER>/logout` trước khi test SSO
+
+### Trap 5 — Vite hard-embed SSO config bắt rebuild web khi rotate CLIENT_ID
+
+`VITE_SSO_*` env compile vào SPA bundle at build time → đổi CLIENT_ID phải rebuild + redeploy web.
+
+**Fix**: Backend expose `GET /auth/sso/config` runtime endpoint. SPA fetch runtime config → 0 rebuild khi rotate.
+
+### Trap 6 — Zitadel role claim chưa được include trong id_token
+
+Auto-provision Pattern C cần parse role claim `urn:zitadel:iam:org:project:roles`. Nếu app không enable "Add Roles To ID Token" → claim empty → auto-provision fail-safe 403.
+
+**Fix**: Zitadel Console → Application → **Token Settings** → **Add Roles To ID Token = ON** + **User Info Inside ID Token = ON**.
