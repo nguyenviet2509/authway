@@ -148,11 +148,18 @@ def get_manifest() -> Response:
         headers={
             "Cache-Control": "public, max-age=300",
             "ETag": f'"{_cached_manifest["version"]}"',
+            "X-Robots-Tag": "noindex",
         },
     )
 ```
 
+**BẮT BUỘC (SPEC.md §3 rule 11 + §12.1):**
+- `X-Robots-Tag: noindex` — ngăn Google/Bing index endpoint public
+- KHÔNG log full response body ở access log (uvicorn/gunicorn: verify `access_log_format` không include response body cho path `.well-known/*`)
+
 **Nếu app có SSO middleware auth-first (Depends dependency):** whitelist path `/.well-known/rbac-permissions.json` khỏi auth check. Cách nhanh nhất: mount router BEFORE global auth dependency.
+
+**Nếu app có response middleware wrap JSON (envelope `{data, meta}`):** bypass wrapping cho manifest endpoint (Central schema validator reject nếu bị wrap).
 
 ---
 

@@ -420,6 +420,16 @@ Activate Phase 4 workflow khi member prompt chứa:
    - Go (Gin/Echo/Fiber): route registration + middleware
 4. Detect existing permission check pattern (nếu app đã có ACL internal):
    - Grep: `checkPermission`, `hasPermission`, `@RequirePermission`, `@permission_required`, `authorize!`, `enforce`
+   - **Nếu KHÔNG tìm thấy pattern nào** → app chưa có decorator/middleware permission check:
+     - Boot validator sẽ warn tất cả declared permission là "unused" (false positive)
+     - 2 lựa chọn — hỏi member chọn:
+       - **(a) Scaffold `@RequirePermission()` decorator + guard trước** (extra ~40 LoC, Phase 4.2 sẽ include). Boot validator work đúng. Recommended nếu app cần enforce runtime.
+       - **(b) DEFER validator** — tạo file `boot-validator.<ext>` với comment `TODO: enable after routes annotated with @RequirePermission`. Chỉ endpoint + catalog work. Recommended nếu member chỉ cần expose manifest.
+4b. Detect response envelope interceptor (BẮT BUỘC — nếu miss sẽ khiến Central sync reject):
+   - Grep: `ResponseInterceptor`, `TransformInterceptor`, `interceptor`, `@UseInterceptors`, `middleware.*response`, `envelope`, `wrapResponse`
+   - Check file `main.<ext>` hoặc `app.module.<ext>` cho `app.useGlobalInterceptors(...)` / equivalent
+   - Nếu detected → note trong report: manifest endpoint sẽ cần bypass wrapper (VD NestJS `@SkipResponseInterceptor()`, FastAPI mount router BEFORE middleware, Express mount route BEFORE envelope middleware)
+   - Verify bằng curl sau implement: response body phải `{"schema":"1", ...}` chứ KHÔNG phải `{"data":{"schema":"1",...},"meta":{}}`
 5. REPORT to member (do not proceed yet):
 ```
 Detected framework: <FW>
@@ -433,15 +443,22 @@ Default roles (3 recommended): <slug>.admin, <slug>.editor, <slug>.viewer
 
 Files to create (new):
   - src/rbac/permissions-catalog.<ext>    (~80 LoC — literal array + APP_SLUG + version fn)
-  - src/rbac/manifest-endpoint.<ext>      (~30 LoC — route handler)
+  - src/rbac/manifest-endpoint.<ext>      (~30 LoC — route handler, incl X-Robots-Tag header)
   - src/rbac/boot-validator.<ext>         (~50 LoC — cross-check + /ready state)
+  [Optional if scaffold chosen at step 4]
+  - src/rbac/require-permission.<ext>     (~40 LoC — decorator + guard, only if member picked scaffold)
 
 Files to APPEND wiring (0 logic touch):
-  - <router/module init file>              (+3 LoC — register endpoint)
+  - <router/module init file>              (+3 LoC — register endpoint, BEFORE envelope interceptor if any)
   - <boot sequence file>                   (+2 LoC — call onBoot() validator)
   - <existing /ready handler, nếu có>      (+1 LoC — include RBAC state)
 
-Estimated delta: +~165 LoC / -0 LoC
+Response envelope interceptor detected: <yes: <interceptor-name> / no>
+  → Nếu yes: manifest endpoint sẽ bypass wrapper (specific bypass mechanism per framework)
+
+Estimated delta: +~165 LoC (+~40 LoC nếu scaffold decorator) / -0 LoC
+
+Content policy self-check (SPEC.md §12.2): AI sẽ scan mỗi description string cho sensitive regex TRƯỚC commit.
 
 Proceed?
 ```

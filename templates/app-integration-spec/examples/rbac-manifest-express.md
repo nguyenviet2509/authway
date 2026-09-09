@@ -130,6 +130,7 @@ export function registerManifestEndpoint(router: Router): void {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=300');
     res.setHeader('ETag', `"${cached.version}"`);
+    res.setHeader('X-Robots-Tag', 'noindex');
     res.status(200).json(cached);
   });
 }
@@ -150,6 +151,7 @@ export async function registerManifestEndpoint(app: FastifyInstance): Promise<vo
       .header('Content-Type', 'application/json; charset=utf-8')
       .header('Cache-Control', 'public, max-age=300')
       .header('ETag', `"${cached.version}"`)
+      .header('X-Robots-Tag', 'noindex')
       .send(cached);
   });
 }
@@ -169,12 +171,19 @@ export function registerManifestEndpoint(router: Router): void {
     ctx.set('Content-Type', 'application/json; charset=utf-8');
     ctx.set('Cache-Control', 'public, max-age=300');
     ctx.set('ETag', `"${cached.version}"`);
+    ctx.set('X-Robots-Tag', 'noindex');
     ctx.body = cached;
   });
 }
 ```
 
+**BẮT BUỘC (SPEC.md §3 rule 11 + §12.1):**
+- `X-Robots-Tag: noindex` — ngăn Google/Bing index endpoint public (đã thêm ở 3 variant trên)
+- KHÔNG log full response body ở access log (morgan/pino: verify custom serializer không dump body cho path `.well-known/*`)
+
 **Nếu app có SSO middleware auth-first:** mount manifest endpoint BEFORE auth middleware, hoặc whitelist path `.well-known/*` trong auth middleware.
+
+**Nếu app có response middleware wrap JSON (envelope `{data, meta}`):** bypass wrapping cho manifest endpoint (Central schema validator reject nếu bị wrap).
 
 ---
 

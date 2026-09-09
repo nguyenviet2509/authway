@@ -334,14 +334,17 @@ Auto-provision Pattern C cần parse role claim `urn:zitadel:iam:org:project:rol
   - Backend có API prefix (`/api`): `<APP_URL>/api/.well-known/rbac-permissions.json`
   - Không prefix / static host: `<APP_URL>/.well-known/rbac-permissions.json`
 
-**Endpoint requirements:**
+**Endpoint requirements (member/AI implement trong app code):**
 - Public, **NO auth** (Central fetch anonymously) — an toàn miễn tuân §3 rule 11 + §12.2 content policy
 - `Content-Type: application/json; charset=utf-8`
 - `Cache-Control: public, max-age=300`
 - `ETag: "<version-string>"` (optional but recommended — Central respect If-None-Match)
 - `X-Robots-Tag: noindex` — tránh Google/Bing index endpoint public
-- **Rate limit tại reverse proxy** (Caddy/nginx/Traefik): khuyến nghị 60 req/min per IP cho path `.well-known/rbac-permissions.json` — chặn scraping mass
 - **KHÔNG log** full request/response body ở access log — chỉ status code + bytes (tránh index sensitive text vào log stack nếu member vô tình leak)
+
+**Infra hardening (admin/ops task — KHÔNG phải scope của member/AI):**
+- Rate limit tại reverse proxy (Caddy/nginx/Traefik): khuyến nghị 60 req/min per IP cho path `.well-known/rbac-permissions.json` — chặn scraping mass. Config này thường ở infra/deploy repo, không phải app repo → admin/ops phụ trách khi rollout app mới.
+- CDN/WAF (nếu có): whitelist path `.well-known/*` khỏi challenge (Cloudflare Under Attack mode, Bảo Táp WAF), verify không bị block sau deploy.
 
 ### 12.2 Manifest schema contract (v1)
 
@@ -402,6 +405,20 @@ Vì manifest public → phải viết như public API doc, không phải interna
 grep -iE 'https?://|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|-(prod|dev|staging|internal)|password|token|secret|apikey' manifest.json
 ```
 Nếu match → REJECT, sửa description thành abstract Vietnamese noun.
+
+**Concrete examples — BAD vs GOOD description:**
+
+| ❌ BAD (không được ship) | Lý do BAD | ✅ GOOD |
+|---|---|---|
+| `"Xem đơn hàng từ table orders join customers on customer_id"` | Leak DB schema | `"Xem đơn hàng"` |
+| `"Duyệt cấp phát khi giá trị >5M cần CFO ký (workflow #42)"` | Leak business rule + internal workflow ID | `"Duyệt cấp phát"` |
+| `"Gọi API https://internal-billing.corp/api/v2/orders"` | Leak internal URL | `"Xem hoá đơn"` |
+| `"Reveal license key (dùng AES-256-GCM, key ở vault-prod)"` | Leak crypto detail + infra | `"Xem license key"` |
+| `"Xoá user (cần check user.is_admin=false trong Postgres)"` | Leak stack + implementation | `"Xoá người dùng"` |
+| `"Export báo cáo — TODO: fix bug xxx-1234 memory leak"` | Leak internal ticket + tech debt | `"Xuất báo cáo"` |
+| `"Add asset (env var DB_PASSWORD required)"` | Leak env var name + credential existence | `"Thêm thiết bị"` |
+
+**Nguyên tắc chung:** description = 1 câu Vietnamese `<verb> <noun>` ngắn (2-6 từ), viết từ POV end-user, KHÔNG mention infra/DB/code/env/business rule chi tiết.
 
 **Validate manifest TRƯỚC ship (dev-time):**
 ```bash

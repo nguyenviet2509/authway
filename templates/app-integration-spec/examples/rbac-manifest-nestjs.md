@@ -133,6 +133,7 @@ export class RbacManifestController {
   @Get('rbac-permissions.json')
   @Header('Content-Type', 'application/json; charset=utf-8')
   @Header('Cache-Control', 'public, max-age=300')
+  @Header('X-Robots-Tag', 'noindex')
   getManifest(@Res({ passthrough: true }) reply: FastifyReply): RbacManifest {
     if (!this.cached) this.cached = buildManifest();
     reply.header('ETag', `"${this.cached.version}"`);
@@ -141,9 +142,13 @@ export class RbacManifestController {
 }
 ```
 
+**BẮT BUỘC (SPEC.md §3 rule 11 + §12.1):**
+- `X-Robots-Tag: noindex` — ngăn Google/Bing index endpoint public
+- KHÔNG log full response body ở access log (chỉ status + bytes). Verify logger config KHÔNG dump body cho path `.well-known/*`
+
 **Nếu app KHÔNG có `@Public()` decorator (SSO middleware auth-first):** thêm `@Public()` (hoặc `@SkipAuth()` — tên tuỳ project) để endpoint public.
 
-**Nếu app có response interceptor wrap JSON (VD envelope `{ data, meta }`):** thêm `@SkipResponseInterceptor()` để trả raw JSON.
+**Nếu app có response interceptor wrap JSON (VD envelope `{ data, meta }`):** thêm `@SkipResponseInterceptor()` để trả raw JSON (Central schema validator reject nếu response bị wrap).
 
 ---
 
@@ -309,12 +314,14 @@ curl -sSL http://127.0.0.1:<PORT>/api/ready
 
 ---
 
-## Advanced variant — auto-scan (skip manual declare)
+## ⚠️ Anti-pattern — auto-scan (KHÔNG dùng)
 
-Nếu team quen NestJS Reflector pattern, có thể build `PERMISSIONS` array TỰ ĐỘNG từ decorator scan (thay vì literal declare):
+**KHÔNG** build `PERMISSIONS` array tự động từ decorator scan tại boot.
 
-- Boot: walk tất cả controllers → collect `@RequirePermission('<id>')` metadata → build `PERMISSIONS = [{id, description}]`
-- Description sinh từ format `<action> <resource>` hoặc từ decorator metadata mở rộng `@RequirePermission({ id, description })`
-- Trade: 0 drift, nhưng phải maintain description ở mỗi decorator call site (thay vì 1 file)
+Lý do:
+- Vi phạm Safety Rule Phase 4 (`bootstrap/CLAUDE.md`): `NEVER auto-populate PERMISSIONS array từ route scan`
+- Description auto-sinh (từ `<action> <resource>` hoặc reflector metadata) → chất lượng thấp, dễ leak sensitive info (Trap 13 SPEC.md §12.8)
+- Central sync workflow yêu cầu admin approve từng permission — auto-scan bypass gate này
+- Member không có audit trail permission list qua git diff nếu list sinh runtime
 
-Ưu tiên default manual declare cho grep-friendly. Auto-scan optional nếu team có kỷ luật decorator.
+Cách đúng: giữ `PERMISSIONS` literal array trong `permissions-catalog.ts` như File 1 trên. Boot validator chỉ CROSS-CHECK declared vs used, KHÔNG generate.
