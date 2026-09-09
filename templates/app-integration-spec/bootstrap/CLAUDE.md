@@ -14,7 +14,7 @@ Member đã đăng ký app trên Central RBAC portal → nhận credentials (fil
 
 | Field | Type | Notes |
 |---|---|---|
-| `OIDC_ISSUER` | URL | Base URL Zitadel. VD `http://10.200.0.125` (LAN) hoặc `https://auth.inet.vn` (prod) |
+| `OIDC_ISSUER` | URL | Base URL Zitadel. VD `http://10.200.0.125` (LAN) hoặc `https://zitadel.000nethost.com` (prod) |
 | `CLIENT_ID` | numeric snowflake | Public, dùng trong URL query |
 | `CLIENT_SECRET` | string | Basic auth apps only. SPA + PKCE app KHÔNG có secret |
 | `REDIRECT_URL` | URL | EXACT match — Zitadel reject nếu sai 1 ký tự (scheme/host/port/path/trailing slash) |

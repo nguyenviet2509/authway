@@ -78,7 +78,7 @@ Xin cấp app trên Central RBAC:
 
 | Field | Note |
 |---|---|
-| `OIDC_ISSUER` | Base URL Zitadel — thường constant per environment (VD `https://auth.inet.vn`), admin verify với member |
+| `OIDC_ISSUER` | Base URL Zitadel — thường constant per environment (VD `https://zitadel.000nethost.com`), admin verify với member |
 | `CLIENT_ID` | Numeric snowflake (VD `387047455193104387`) |
 | `CLIENT_SECRET` | Chỉ Pattern B backend Basic auth. SPA + PKCE KHÔNG có secret |
 | `REDIRECT_URL` | EXACT match với callback đã register — sai 1 ký tự = Zitadel reject |

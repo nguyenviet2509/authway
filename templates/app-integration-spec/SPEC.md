@@ -12,7 +12,7 @@ Khi admin đăng ký app trên Central portal, member nhận:
 
 | Field | Type | Example | Notes |
 |---|---|---|---|
-| `OIDC_ISSUER` | URL | `http://10.200.0.125` (LAN) / `https://auth.inet.vn` (prod) | Base URL Zitadel |
+| `OIDC_ISSUER` | URL | `http://10.200.0.125` (LAN) / `https://zitadel.000nethost.com` (prod) | Base URL Zitadel |
 | `CLIENT_ID` | string (numeric snowflake) | `387047455193104387` | Public, dùng trong URL query |
 | `CLIENT_SECRET` | string | `xxxxxxxxxxxxxxxxxxx` | ONLY Basic auth apps. SPA + PKCE app KHÔNG có secret |
 | `REDIRECT_URL` | URL | `https://<app-host>/oauth2/callback` (Pattern A) HOẶC `https://<app-host>/<framework-path>` (Pattern B) | EXACT match — sai 1 ký tự = reject |
