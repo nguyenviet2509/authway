@@ -27,10 +27,14 @@ Template **AI-facing** để member team dùng Claude / Cursor / Copilot refacto
 |---|---|---|
 | `SPEC.md` | Luôn luôn | AI |
 | `DECISION-TREE.md` | Luôn luôn (trước SPEC) | AI + human |
-| `examples/nodejs-express-iap.md` | Node backend Express/Fastify/Koa | AI |
-| `examples/python-fastapi-iap.md` | Python backend FastAPI/Flask/Django | AI |
-| `examples/nextjs-app-router-nativeauth.md` | Next.js full-stack | AI |
-| `examples/spa-react-vue-pkce.md` | SPA thuần (React/Vue/Svelte) | AI |
+| `examples/nodejs-express-iap.md` | Node backend Express/Fastify/Koa (SSO) | AI |
+| `examples/python-fastapi-iap.md` | Python backend FastAPI/Flask/Django (SSO) | AI |
+| `examples/nextjs-app-router-nativeauth.md` | Next.js full-stack (SSO) | AI |
+| `examples/spa-react-vue-pkce.md` | SPA thuần React/Vue/Svelte (SSO) | AI |
+| `examples/federated-login-example.md` | App có auth phức tạp muốn preserve (Pattern C SSO) | AI |
+| `examples/rbac-manifest-nestjs.md` | Phase 4 — NestJS RBAC manifest | AI |
+| `examples/rbac-manifest-fastapi.md` | Phase 4 — FastAPI RBAC manifest | AI |
+| `examples/rbac-manifest-express.md` | Phase 4 — Express/Fastify/Koa RBAC manifest | AI |
 
 Framework khác (Rails/Go/PHP)? → Paste SPEC.md + DECISION-TREE.md + 1 reference gần nhất (VD Node cho Go). AI adapt được.
 

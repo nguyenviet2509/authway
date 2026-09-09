@@ -76,3 +76,18 @@ VD: role có `orgId` metadata, multi-tenant, roles map → khác feature per ten
 ## Nếu vẫn không chắc
 
 Default → **Pattern A**. Refactor delta nhỏ, dễ rollback. Nếu sau này cần token → migrate sang B, code Pattern A xoá không tốn.
+
+---
+
+## Phase 4 — RBAC Permission Manifest (sau khi chọn Pattern A/B/C)
+
+Sau khi SSO integration (Pattern A/B/C) đã done + deploy — **chỉ tiếp Phase 4 nếu:**
+
+- App cần Central quản lý permission catalog + role assignment (thay vì tự lưu roles/permissions trong DB app)
+- Admin muốn assign user vào role qua Central UI (thay vì gọi API app)
+
+**Nếu app chỉ cần identity (email/username) từ Central SSO → SKIP Phase 4.** App tự quản roles internal như cũ.
+
+**Trigger:** member prompt AI với keyword `{rbac manifest, permission catalog, central sync}` + verb `{implement, add, expose}`. AI đọc `bootstrap/CLAUDE.md` (hoặc `AGENTS.md`) → activate Phase 4 workflow.
+
+**Deep reference:** `SPEC.md` §12 + `examples/rbac-manifest-{nestjs,fastapi,express}.md`.

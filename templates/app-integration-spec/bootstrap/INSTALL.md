@@ -108,6 +108,21 @@ Thay `Pattern C` bằng `Pattern A` hoặc `Pattern B` tùy nhu cầu (xem `DECI
 > SSO login lỗi: [paste error]. Đọc AGENTS.md + backend logs +
 > browser network tab, root-cause + đề xuất fix.
 
+### 4.7 Phase 4 — RBAC Permission Manifest (chỉ khi app cần Central sync permission)
+
+Sau khi SSO Phase 1-3 done + app cần Central quản lý permission catalog + role assignment (thay vì tự lưu roles trong DB app):
+
+> Đọc AGENTS.md Phase 4 và implement RBAC Permission Manifest cho
+> app này. APP_SLUG = <slug đã register ở Central>. Scout routes +
+> report draft PERMISSIONS list trước khi code, chờ tôi confirm.
+
+Dry-run (scout only, không code):
+
+> Đọc AGENTS.md Phase 4 và scout routes app này. Report draft
+> PERMISSIONS list + files sẽ create, KHÔNG code. Chờ tôi duyệt.
+
+Sau khi AI xong: admin vào Central portal → **Apps → `<APP_SLUG>` → Edit → set field Manifest URL** = URL AI report → **Actions → Sync manifest → Apply**.
+
 ## Bước 5 — Post-implementation manual steps
 
 AI xong Phase 1-2. Anh làm manual:

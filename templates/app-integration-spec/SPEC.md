@@ -314,3 +314,273 @@ User đang login Zitadel Console (VD `admin@<zitadel-host>`) trong browser → c
 Auto-provision Pattern C cần parse role claim `urn:zitadel:iam:org:project:roles`. Nếu app không enable "Add Roles To ID Token" → claim empty → auto-provision fail-safe 403.
 
 **Fix**: Zitadel Console → Application → **Token Settings** → **Add Roles To ID Token = ON** + **User Info Inside ID Token = ON**.
+
+---
+
+## 12. RBAC Permission Manifest (Phase 4 — sau khi SSO đã done)
+
+**When to activate:** app cần Central quản lý permission catalog + role assignment (thay vì tự lưu roles/permissions trong DB app). Nếu app chỉ cần identity (email/username) → skip §12.
+
+### 12.1 What Central RBAC expects
+
+- App expose **manifest endpoint** — file JSON declare toàn bộ permission app support + default roles template
+- Admin Central bấm "Sync manifest" từ portal → Central fetch → validate schema → compute diff vs DB → admin approve → apply
+- Sau apply: role management, user-role assignment, permission check runtime tất cả qua Central RBAC API
+
+**Manifest URL:**
+- Path relative: `.well-known/rbac-permissions.json`
+- Absolute URL member khai vào field `manifest_url` khi register app ở Central portal:
+  - Backend có API prefix (`/api`): `<APP_URL>/api/.well-known/rbac-permissions.json`
+  - Không prefix / static host: `<APP_URL>/.well-known/rbac-permissions.json`
+
+**Endpoint requirements:**
+- Public, **NO auth** (Central fetch anonymously)
+- `Content-Type: application/json; charset=utf-8`
+- `Cache-Control: public, max-age=300`
+- `ETag: "<version-string>"` (optional but recommended — Central respect If-None-Match)
+
+### 12.2 Manifest schema contract (v1)
+
+```json
+{
+  "schema": "1",
+  "service": "<APP_SLUG>",
+  "version": "<VERSION_STRING>",
+  "permissions": [
+    {
+      "id": "<APP_SLUG>:<resource>.<action>",
+      "description": "<Human-readable Vietnamese>",
+      "since_version": "<VERSION_STRING>",
+      "status": "active"
+    }
+  ],
+  "default_roles": [
+    {
+      "key": "<APP_SLUG>.<role-name>",
+      "description": "<Human-readable>",
+      "permissions": ["<APP_SLUG>:<resource>.<action>", "..."]
+    }
+  ]
+}
+```
+
+**Constraints (regex enforced bởi Central — sai = sync reject):**
+
+| Field | Rule |
+|---|---|
+| `schema` | Literal `"1"` |
+| `service` | `^[a-z][a-z0-9-]{2,31}$` — MUST match slug đã register ở Central portal EXACT |
+| `version` | 1-64 chars — semver hoặc date-based, deterministic per build |
+| `permissions[].id` | `^[a-z][a-z0-9-]{2,31}:[a-z][a-z0-9._-]+$` — first segment MUST khớp `service` field (namespace enforcement) |
+| `permissions[].description` | 1-500 chars |
+| `permissions[].status` | `active` (default) hoặc `soft-deleted` |
+| `permissions[].alias_of` | Optional — id của permission renamed (backward compat) |
+| `permissions` size | Max 500 entries |
+| `default_roles[].key` | `^[a-z][a-z0-9-]{2,31}\.[a-z][a-z0-9]{1,31}$` — format `<slug>.<name>` |
+| `default_roles` size | Max 50 entries |
+| Min 1 role | Bắt buộc có 1 entry với key = `<APP_SLUG>.admin` (superuser fallback) |
+
+**Validate manifest TRƯỚC ship (dev-time):**
+```bash
+# Fetch Central schema (một lần, cache local)
+curl -sSL <CENTRAL_URL>/.well-known/rbac-permissions-schema.json -o rbac-permissions-schema.json
+
+# Validate app manifest against schema
+npx -y ajv-cli validate -s rbac-permissions-schema.json -d <APP_URL>/.well-known/rbac-permissions.json
+```
+
+### 12.3 Default pattern — Manual declare + boot validator
+
+**Rationale:** literal array trong source file — grep-friendly, version-diff-friendly, framework-agnostic. Boot-time validator chống drift giữa declared list và permission dùng thực tế.
+
+**File structure (kebab-case cho JS/TS/Python; respect ngôn ngữ khác):**
+```
+<APP_ROOT>/src/rbac/                # hoặc convention framework tương đương
+├── permissions-catalog.<ext>       # literal array + APP_SLUG + version fn
+├── manifest-endpoint.<ext>         # route handler build JSON response
+└── boot-validator.<ext>            # cross-check declared vs actual routes, set /ready state
+```
+
+**Pseudocode `permissions-catalog` (framework-agnostic):**
+```pseudo
+APP_SLUG = "<slug>"
+
+buildVersion() = process.env.GIT_SHA?.slice(0, 8) OR `${today("YYYY-MM-DD")}.1`
+
+# Flat array — grep-friendly, review-friendly
+PERMISSIONS = [
+  { id: "<slug>:<resource>.<action>", description: "<Human vietnamese>" },
+  ...
+]
+
+# 3 recommended roles — customize theo nghiệp vụ, có thể add thêm role custom
+DEFAULT_ROLES = [
+  {
+    key: "<slug>.admin",
+    description: "Quản trị viên — full access",
+    permissions: PERMISSIONS.map(p => p.id)                    # all
+  },
+  {
+    key: "<slug>.editor",
+    description: "Nghiệp vụ — CRUD trừ delete/approve/user-mgmt",
+    permissions: PERMISSIONS.filter(p => !isDestructiveOrUserMgmt(p.id)).map(p => p.id)
+  },
+  {
+    key: "<slug>.viewer",
+    description: "Chỉ xem",
+    permissions: PERMISSIONS.filter(p => isReadOrExport(p.id)).map(p => p.id)
+  }
+]
+
+buildManifest() = {
+  schema: "1",
+  service: APP_SLUG,
+  version: buildVersion(),
+  permissions: PERMISSIONS,
+  default_roles: DEFAULT_ROLES
+}
+```
+
+**Pseudocode `manifest-endpoint`:**
+```pseudo
+# Register route theo framework convention
+GET "<PATH>/.well-known/rbac-permissions.json" → handler(req, res):
+  manifest = MEMOIZED_MANIFEST OR (MEMOIZED_MANIFEST = buildManifest())
+  res.setHeader("Content-Type", "application/json; charset=utf-8")
+  res.setHeader("Cache-Control", "public, max-age=300")
+  res.setHeader("ETag", `"${manifest.version}"`)
+  res.send(JSON.stringify(manifest))
+```
+
+**Pseudocode `boot-validator`:**
+```pseudo
+READY_STATE = "STARTING"
+
+onBoot():
+  declared_ids = new Set(PERMISSIONS.map(p => p.id))
+  actual_ids   = scanRouteRegistryForPermissionUsage()   # framework-specific — grep decorator/middleware
+
+  missing = actual_ids.filter(id => !declared_ids.has(id))
+  unused  = [...declared_ids].filter(id => !actual_ids.has(id))
+
+  if missing.length > 0:
+    log.ERROR("[rbac-manifest] Routes use undeclared permissions:", missing)
+    log.ERROR("[rbac-manifest] Fix: add to PERMISSIONS array in permissions-catalog")
+    READY_STATE = "UNHEALTHY"           # /ready → 503
+  else:
+    if unused.length > 0:
+      log.WARN("[rbac-manifest] Declared but unused (dead code):", unused)
+    log.INFO(`[rbac-manifest] Catalog OK — ${declared_ids.size} permissions declared`)
+    READY_STATE = "HEALTHY"
+
+# /ready endpoint
+GET "/ready" → 200 if READY_STATE == "HEALTHY" else 503
+```
+
+### 12.4 Refactor delta
+
+**Files to CREATE (new, ~150 LoC total):**
+- `<APP_ROOT>/src/rbac/permissions-catalog.<ext>` — literal array + APP_SLUG + version fn
+- `<APP_ROOT>/src/rbac/manifest-endpoint.<ext>` — route handler
+- `<APP_ROOT>/src/rbac/boot-validator.<ext>` — cross-check + /ready state
+
+**Files to APPEND (0 line modified existing logic):**
+- Router / module init file → register manifest endpoint route
+- Boot sequence file → call `onBoot()` validator, initialize READY_STATE
+- `/ready` handler (nếu app đã có) → include RBAC catalog state; nếu chưa có → boot-validator tự create endpoint
+
+**Files NOT to touch:**
+- Business logic (data models, business API endpoints, background jobs)
+- Existing auth code (SSO integration đã done ở Pattern A/B/C)
+- `.env` structure — RBAC manifest KHÔNG cần env var mới (trừ optional `GIT_SHA` cho version)
+
+### 12.5 Default roles convention
+
+**Recommended pattern (start point, member customize theo nghiệp vụ):**
+
+| Role | Permission set |
+|---|---|
+| `<slug>.admin` | ALL permissions |
+| `<slug>.editor` | ALL EXCEPT: `*.delete`, `*.approve`, `users.*`, `object-permissions.*`, `user-groups.*` |
+| `<slug>.viewer` | ONLY: `*.read`, `*.export` |
+
+**Custom roles:** member được thêm role theo nghiệp vụ (VD `<slug>.approver`, `<slug>.auditor`, `<slug>.support-l1`). Central UI display tất cả roles trong `default_roles` khi admin assign user.
+
+**Note quan trọng:** `default_roles` = **TEMPLATE SEED** — Central admin có thể tạo thêm role custom trên UI sau, không bị giới hạn bởi list này. Manifest chỉ seed lần đầu + reference cho admin.
+
+**Constraint:** min 1 role `<APP_SLUG>.admin` — bắt buộc để có superuser fallback nếu Central admin không config gì.
+
+### 12.6 Sync workflow (admin-side — NOT member concern, FYI only)
+
+1. Member deploy app → manifest endpoint live tại `<manifest_url>`
+2. Admin vào Central UI → **Apps** → `<APP_SLUG>` → **Actions → Sync manifest**
+3. Central fetch `manifest_url` → validate schema qua zod → nếu fail: display error, stop
+4. Central compute diff vs DB current state:
+   - **Add** — permission mới trong manifest, chưa có trong DB
+   - **Update-desc** — permission đã có, description đổi
+   - **Explicit-deprecate** — permission trong DB `status: soft-deleted` trong manifest (member soft-delete)
+   - **Implicit-deprecate** — permission trong DB không còn xuất hiện trong manifest + không marked deprecate
+5. Admin review 4-category diff → tick checkbox implicit-deprecate (default UNCHECKED, warning banner) → **Apply**
+6. Central persist → audit trail entry
+7. Role management, user assignment, permission check runtime → dùng Central RBAC API tiếp
+
+**Version bump flow:** member ship version mới → app RESTART (memoized manifest rebuild) → admin sync lại cùng flow. Không có auto-sync để tránh drift ẩn.
+
+### 12.7 Validation checklist (RBAC — thêm vào §6)
+
+Chạy TRƯỚC khi báo done Phase 4:
+
+- [ ] `curl <APP_URL>/<path>/.well-known/rbac-permissions.json` → HTTP 200 + `Content-Type: application/json`
+- [ ] Response validate PASS qua Central schema:
+      ```bash
+      curl -sSL <CENTRAL_URL>/.well-known/rbac-permissions-schema.json > /tmp/schema.json
+      curl -sSL <APP_URL>/<path>/.well-known/rbac-permissions.json | npx -y ajv-cli validate -s /tmp/schema.json -d /dev/stdin
+      ```
+- [ ] `permissions[].id` first segment == `service` field (namespace check) — Central reject nếu mismatch
+- [ ] `default_roles[]` có min 1 entry với key = `<APP_SLUG>.admin`
+- [ ] Boot validator log emit khi startup — verify `docker logs` / `journalctl` thấy `[rbac-manifest]`
+- [ ] `/ready` return 503 khi validator fail (test: xóa 1 entry declared → restart → `curl /ready` phải 503)
+- [ ] Response headers có `ETag` + `Cache-Control: public, max-age=300`
+- [ ] Reverse proxy / WAF / CDN KHÔNG block `.well-known/*` path (verify curl từ external network)
+- [ ] Slug trong manifest EXACT match slug đã register ở Central portal (không typo)
+- [ ] `manifest_url` field đã update ở Central portal (nếu app đã register trước Phase 4)
+
+### 12.8 Common traps (RBAC — thêm vào §11)
+
+#### Trap 7 — Slug mismatch giữa app register và manifest `service` field
+
+- **Symptom**: Central sync fail "namespace violation" hoặc "service does not match app slug"
+- **Root cause**: admin register slug `<slug-a>` ở Central portal nhưng manifest ghi `service: "<slug-b>"`
+- **Fix**: verify slug ở Central Apps table = `service` field trong manifest EXACT match (case-sensitive)
+
+#### Trap 8 — Global prefix framework nuốt `.well-known` path
+
+- **Symptom**: `curl <APP_URL>/.well-known/rbac-permissions.json` → 404 (route không match)
+- **Root cause**: framework auto-prefix mọi route (NestJS `setGlobalPrefix('api')`, Django `path('api/', include(...))`, FastAPI `app.include_router(router, prefix='/api')`)
+- **Fix**: hoặc register endpoint dưới prefix (`<APP_URL>/api/.well-known/...`) và khai đúng vào `manifest_url` ở Central portal, hoặc whitelist path exclusion khỏi global prefix (framework-specific)
+
+#### Trap 9 — ETag / version không stable → Central re-sync no-op
+
+- **Symptom**: admin bấm sync → diff empty dù member vừa ship perm mới
+- **Root cause**: version string non-deterministic (VD `Date.now()` — đổi mỗi request), hoặc member không restart app sau deploy → memoized manifest cũ vẫn serve
+- **Fix**:
+  - Version = `GIT_SHA` short (deterministic per build) hoặc date-based `YYYY-MM-DD.N` (bump N khi ship trong cùng ngày)
+  - RESTART app sau mỗi deploy để memoized manifest rebuild
+
+#### Trap 10 — Reverse proxy / WAF / CDN block `.well-known/*`
+
+- **Symptom**: `curl` từ external → 404 hoặc 403, nhưng gọi trực tiếp container/localhost OK
+- **Root cause**: OpenResty / Cloudflare / nginx / ModSecurity block path pattern `.well-known/*` mặc định (đã hit prod tháng 8/2026 với `.well-known/rbac-permissions-schema`)
+- **Fix**: whitelist path trong proxy config; verify BẮT BUỘC bằng `curl` từ external TRƯỚC báo done
+
+#### Trap 11 — Memoized manifest không refresh sau version bump
+
+- **Symptom**: member ship version mới, deploy xong, nhưng Central sync vẫn thấy version cũ
+- **Root cause**: `buildManifest()` memoize forever trong process memory, không invalidate runtime
+- **Fix**: memoize OK (rebuild only on process restart) — nhưng member phải RESTART app sau deploy (không chỉ reload code). Document rõ trong deploy runbook
+
+#### Trap 12 — Manifest publish nhưng `manifest_url` chưa set ở Central
+
+- **Symptom**: admin bấm sync → error "no manifest URL configured for this app"
+- **Root cause**: app đã register trước khi có Phase 4 → field `manifest_url` empty ở DB
+- **Fix**: admin vào Central UI → **Apps** → `<APP_SLUG>` → **Edit** → set field `Manifest URL` = full absolute URL → save. Sync lại.

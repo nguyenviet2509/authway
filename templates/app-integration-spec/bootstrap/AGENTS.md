@@ -385,3 +385,112 @@ Sau khi cook + deploy, verify 6 traps trong `SPEC.md` §11:
 4. [ ] Test SSO trong fresh incognito browser (tránh Zitadel session collision)
 5. [ ] SPA fetch `/auth/sso/config` runtime (không Vite hard-embed)
 6. [ ] Zitadel "Add Roles To ID Token = ON" (nếu Pattern C auto-provision)
+
+---
+
+## Phase 4 — RBAC Permission Manifest (chỉ khi app cần Central quản lý permission)
+
+**When to activate:** app cần Central quản lý permission catalog + role assignment (thay vì tự lưu roles/permissions trong DB app). Nếu app chỉ cần identity → skip Phase 4.
+
+**Deeper reference:** `SPEC.md` §12 + `examples/rbac-manifest-{nestjs,fastapi,express}.md`.
+
+### Trigger detection (fuzzy) — add keywords
+
+Activate Phase 4 workflow khi member prompt chứa:
+- Keywords: `{rbac manifest, permission catalog, central sync, phan quyen central, expose permission, sync permission}`
+- + verb: `{implement, setup, add, tich hop, expose, publish}`
+
+**Examples triggering Phase 4:**
+- "Add RBAC manifest cho app"
+- "Expose permission catalog để Central sync"
+- "Tích hợp Central RBAC permission sync"
+- "Publish rbac-permissions.json endpoint"
+
+### Phase 4.1 — Scout & Report (READ-ONLY)
+
+1. Verify SSO integration (Phase A/B/C) đã done — nếu chưa: STOP, tell member complete SSO Phase 1-3 trước
+2. Verify `APP_SLUG` biết rõ — hỏi member (slug đã register ở Central portal), grep `.env` hoặc app config
+3. Detect route registry pattern theo framework:
+   - NestJS: `@Get/@Post/@Controller` decorators + custom `@RequirePermission()` (nếu có)
+   - FastAPI: `@app.get/@router.get` + `Depends(has_permission(...))`
+   - Express/Fastify/Koa: `router.get/router.post` + permission middleware
+   - Django: `urlpatterns` + `@permission_required` decorator
+   - Spring: `@GetMapping/@PostMapping` + `@PreAuthorize`
+   - Rails: `routes.rb` + Pundit/CanCanCan policies
+   - Go (Gin/Echo/Fiber): route registration + middleware
+4. Detect existing permission check pattern (nếu app đã có ACL internal):
+   - Grep: `checkPermission`, `hasPermission`, `@RequirePermission`, `@permission_required`, `authorize!`, `enforce`
+5. REPORT to member (do not proceed yet):
+```
+Detected framework: <FW>
+APP_SLUG: <slug> (from <source: .env / config / member confirm>)
+Existing permission check pattern: <found: <pattern> | not-found>
+Routes discovered: <N> routes
+Suggested permissions to declare (draft): <M> permissions:
+  <slug>:<resource>.<action> — <suggested description>
+  ...
+Default roles (3 recommended): <slug>.admin, <slug>.editor, <slug>.viewer
+
+Files to create (new):
+  - src/rbac/permissions-catalog.<ext>    (~80 LoC — literal array + APP_SLUG + version fn)
+  - src/rbac/manifest-endpoint.<ext>      (~30 LoC — route handler)
+  - src/rbac/boot-validator.<ext>         (~50 LoC — cross-check + /ready state)
+
+Files to APPEND wiring (0 logic touch):
+  - <router/module init file>              (+3 LoC — register endpoint)
+  - <boot sequence file>                   (+2 LoC — call onBoot() validator)
+  - <existing /ready handler, nếu có>      (+1 LoC — include RBAC state)
+
+Estimated delta: +~165 LoC / -0 LoC
+
+Proceed?
+```
+6. WAIT for member "OK/proceed/yes" — DO NOT touch code
+
+### Phase 4.2 — Implement (only after member OK)
+
+1. Git: `git checkout -b feat/rbac-manifest-phase4` (feature branch, NEVER commit master)
+2. Create 3 file: `permissions-catalog`, `manifest-endpoint`, `boot-validator` per framework example
+3. Populate `PERMISSIONS` array — offer draft từ route scan, member confirm/edit BEFORE commit
+4. Populate `DEFAULT_ROLES` — 3 recommended (admin/editor/viewer) filter logic
+5. APPEND route registration + boot wiring — verify diff KHÔNG touch business logic hoặc auth code cũ
+6. Build/compile check — fail = fix + retry
+7. Local smoke test:
+   ```bash
+   curl -sSL http://127.0.0.1:<PORT>/<path>/.well-known/rbac-permissions.json | jq .
+   # Expect: valid JSON, schema="1", service=<APP_SLUG>, permissions[], default_roles[]
+   ```
+8. Optional local validate qua Central schema:
+   ```bash
+   curl -sSL <CENTRAL_URL>/.well-known/rbac-permissions-schema.json > /tmp/schema.json
+   curl -sSL http://127.0.0.1:<PORT>/<path>/.well-known/rbac-permissions.json | npx -y ajv-cli validate -s /tmp/schema.json -d /dev/stdin
+   ```
+9. Commit + push feature branch
+
+### Phase 4.3 — Verify & Handoff
+
+1. Provide deploy steps (member executes manual — không auto-deploy prod)
+2. Post-deploy checklist `SPEC.md` §12.7 (10 items) — walk through with member
+3. Notify member — copy-paste template:
+```
+✅ Phase 4 RBAC Manifest done.
+
+Manifest URL live:
+  <APP_URL>/<path>/.well-known/rbac-permissions.json
+
+Next step (admin action, không phải member):
+  1. Admin vào Central portal → Apps → <APP_SLUG> → Edit
+  2. Field "Manifest URL" = <full absolute URL ở trên>
+  3. Save
+  4. Actions → Sync manifest → review 4-category diff → Apply
+```
+
+### Safety Rules Phase 4 (INVIOLABLE)
+
+- NEVER touch business logic hoặc auth code cũ (Phase A/B/C artifacts)
+- NEVER auto-populate `PERMISSIONS` array từ route scan — always show DRAFT + member confirm BEFORE commit
+- NEVER commit master directly (feature branch always)
+- If `APP_SLUG` unknown → STOP + ask member (không guess)
+- If framework unknown → STOP + ask member (không guess pattern)
+- If SSO chưa done → STOP + tell member complete Phase 1-3 trước
+- If `PERMISSIONS` array > 500 entries → REPORT to member "vượt Central max 500, cần split app"
