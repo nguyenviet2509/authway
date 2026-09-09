@@ -145,6 +145,7 @@ Concrete reference: `examples/federated-login-example.md`.
 8. **Sign-out chain đầy đủ** — clear local session + oauth2-proxy cookie + Zitadel session. Half-way sign-out = next login skip MFA.
 9. **KHÔNG hardcode `OIDC_ISSUER` / `CLIENT_ID` / `CLIENT_SECRET`** — luôn env var. `.env` phải trong `.gitignore`.
 10. **HTTPS bắt buộc prod** (Zitadel reject HTTP redirect_uri trừ khi Zitadel bật Development Mode).
+11. **Manifest = public schema doc, KHÔNG chứa sensitive info.** Manifest endpoint (§12) sẽ Google-indexable (nếu chưa có `X-Robots-Tag: noindex`) + curl-accessible từ internet. → **CẤM** include: internal URL, IP nội bộ, DB schema chi tiết, connection string, hostname service khác, token/secret, PII, business rule chi tiết. → **CHỈ** include: permission ID (đã prefix service slug), Vietnamese action description (verb + noun), role key, role's permission list. Xem §12.2 bảng "Safe vs Forbidden fields".
 
 ---
 
@@ -334,10 +335,13 @@ Auto-provision Pattern C cần parse role claim `urn:zitadel:iam:org:project:rol
   - Không prefix / static host: `<APP_URL>/.well-known/rbac-permissions.json`
 
 **Endpoint requirements:**
-- Public, **NO auth** (Central fetch anonymously)
+- Public, **NO auth** (Central fetch anonymously) — an toàn miễn tuân §3 rule 11 + §12.2 content policy
 - `Content-Type: application/json; charset=utf-8`
 - `Cache-Control: public, max-age=300`
 - `ETag: "<version-string>"` (optional but recommended — Central respect If-None-Match)
+- `X-Robots-Tag: noindex` — tránh Google/Bing index endpoint public
+- **Rate limit tại reverse proxy** (Caddy/nginx/Traefik): khuyến nghị 60 req/min per IP cho path `.well-known/rbac-permissions.json` — chặn scraping mass
+- **KHÔNG log** full request/response body ở access log — chỉ status code + bytes (tránh index sensitive text vào log stack nếu member vô tình leak)
 
 ### 12.2 Manifest schema contract (v1)
 
@@ -379,6 +383,25 @@ Auto-provision Pattern C cần parse role claim `urn:zitadel:iam:org:project:rol
 | `default_roles[].key` | `^[a-z][a-z0-9-]{2,31}\.[a-z][a-z0-9]{1,31}$` — format `<slug>.<name>` |
 | `default_roles` size | Max 50 entries |
 | Min 1 role | Bắt buộc có 1 entry với key = `<APP_SLUG>.admin` (superuser fallback) |
+
+**Content policy — Safe vs Forbidden fields (BẮT BUỘC — §3 rule 11 chi tiết):**
+
+Vì manifest public → phải viết như public API doc, không phải internal comment.
+
+| Field | ✅ Allowed | ❌ Cấm |
+|---|---|---|
+| `permissions[].id` | `<slug>:<resource>.<action>` — abstract action name | Nhúng ID user thật / tenant ID / UUID cụ thể |
+| `permissions[].description` | Vietnamese verb + noun ngắn ("Xem thiết bị", "Duyệt cấp phát") | Business rule chi tiết ("Duyệt khi >5M cần CFO ký"), URL nội bộ, hostname, IP, DB name, stack trace, code comment |
+| `default_roles[].key` | `<slug>.<role-name>` abstract | Nhúng tên user thật / employee code |
+| `default_roles[].description` | Vietnamese role name ("Quản trị", "Nghiệp vụ") | SOP nội bộ, tên team member, workflow chi tiết |
+| `default_roles[].permissions` | Reference permission id đã declare trong same manifest | Reference permission của app khác (leak namespace) |
+| ANY field | (không có gì khác) | HTTP URL, `\d+\.\d+\.\d+\.\d+`, `password/token/secret/key`, hostname `*-prod/dev/staging`, connection string |
+
+**Self-check regex (dev/AI phải chạy trước ship):**
+```
+grep -iE 'https?://|[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+|-(prod|dev|staging|internal)|password|token|secret|apikey' manifest.json
+```
+Nếu match → REJECT, sửa description thành abstract Vietnamese noun.
 
 **Validate manifest TRƯỚC ship (dev-time):**
 ```bash
@@ -584,3 +607,13 @@ Chạy TRƯỚC khi báo done Phase 4:
 - **Symptom**: admin bấm sync → error "no manifest URL configured for this app"
 - **Root cause**: app đã register trước khi có Phase 4 → field `manifest_url` empty ở DB
 - **Fix**: admin vào Central UI → **Apps** → `<APP_SLUG>` → **Edit** → set field `Manifest URL` = full absolute URL → save. Sync lại.
+
+#### Trap 13 — Leak sensitive info qua manifest description
+
+- **Symptom**: security review / Google search phát hiện manifest chứa `"connect qua db-prod-01:5432"` hoặc `"gọi https://internal-billing.corp/api"` hoặc `"password field bị hash SHA256 salt=xxx"`
+- **Root cause**: dev/AI copy-paste code comment / SOP nội bộ / stack trace vào `description` field khi build permissions catalog. Manifest public → leak internal architecture cho attacker recon.
+- **Fix**:
+  - `description` = business action từ POV end-user, viết Vietnamese noun ngắn ("Xem thiết bị", KHÔNG "Xem thiết bị từ MySQL table `assets` join `branches`")
+  - Chạy self-check regex (§12.2) trước ship
+  - Rotate: nếu đã leak — bump version + apply-diff mới, verify Central không cache raw sensitive (Central chỉ lưu permission id + description sau apply, không raw manifest → OK sau khi member ship version fix)
+  - Cấu hình `X-Robots-Tag: noindex` ngay để tránh Google/Bing index sẵn

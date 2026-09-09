@@ -494,3 +494,28 @@ Next step (admin action, không phải member):
 - If framework unknown → STOP + ask member (không guess pattern)
 - If SSO chưa done → STOP + tell member complete Phase 1-3 trước
 - If `PERMISSIONS` array > 500 entries → REPORT to member "vượt Central max 500, cần split app"
+
+### Phase 4 Pre-flight Manifest Safety Check (BẮT BUỘC trước Phase 4.2 commit)
+
+Manifest sẽ public trên internet → phải đọc + tuân §3 rule 11 + §12.2 "Safe vs Forbidden fields" trong SPEC.md.
+
+**Pre-flight steps (AI tự chạy trước khi write `permissions-catalog.<ext>`):**
+1. Đọc SPEC.md §3 rule 11 + §12.2 content policy table
+2. Với mỗi `description` string dự định viết: check KHÔNG match regex sensitive:
+   ```
+   /https?:\/\//i          → URL nội bộ → REJECT
+   /\d+\.\d+\.\d+\.\d+/    → IP → REJECT
+   /-(prod|dev|staging|internal)/i  → hostname env → REJECT
+   /password|token|secret|apikey/i  → credential hint → REJECT
+   /\b(SELECT|INSERT|UPDATE|DELETE) /i  → SQL leak → REJECT
+   ```
+3. Nếu member paste code comment / docstring / SOP nội bộ vào description → strip, chỉ giữ Vietnamese verb + noun ngắn
+4. Ghi vào Phase 4 report: `Manifest safety self-check: PASS (checked N descriptions, 0 sensitive matches)` — nếu FAIL thì list các description vi phạm + hỏi member sửa TRƯỚC khi commit
+
+**Hard fail conditions (STOP Phase 4.2, không commit):**
+- Bất kỳ description nào match sensitive regex sau khi strip
+- Member insist dùng description leak sensitive info → escalate: giải thích rủi ro recon + phishing, không proceed
+
+**Cấu hình bắt buộc trong `manifest-endpoint.<ext>`:**
+- Response header `X-Robots-Tag: noindex` (ngăn Google/Bing index)
+- Log config: KHÔNG log full response body, chỉ status + bytes
