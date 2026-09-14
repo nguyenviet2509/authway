@@ -166,6 +166,14 @@ services:
       - "traefik.http.routers.zitadel-https.service=zitadel"
       - "traefik.http.routers.zitadel-https.middlewares=ratelimit-auth@file"
       - "traefik.http.routers.zitadel.middlewares=ratelimit-auth@file"
+      # LAN-IP fallback router — HTTP only, private-IP Host header.
+      # Restores OneLog + legacy in-VPC callers that OIDC-discover via http://10.200.0.125.
+      # Coexist with public HTTPS domain; removed accidentally in commit 21ba1c3 domain swap.
+      - "traefik.http.routers.zitadel-lan.rule=Host(`10.200.0.125`) && !PathPrefix(`/ui/v2/login`)"
+      - "traefik.http.routers.zitadel-lan.entrypoints=web"
+      - "traefik.http.routers.zitadel-lan.priority=90"
+      - "traefik.http.routers.zitadel-lan.service=zitadel"
+      - "traefik.http.routers.zitadel-lan.middlewares=ratelimit-auth@file"
       - "traefik.http.services.zitadel.loadbalancer.server.port=8080"
       - "traefik.http.services.zitadel.loadbalancer.server.scheme=h2c"
     healthcheck:
@@ -219,6 +227,12 @@ services:
       # on plain-HTTP deployments. Strip HSTS at Traefik until fixed upstream.
       - "traefik.http.middlewares.strip-hsts-login.headers.customresponseheaders.Strict-Transport-Security="
       - "traefik.http.routers.zitadel-login.middlewares=ratelimit-auth@file,strip-hsts-login"
+      # LAN-IP fallback router for login sidecar (HTTP, private IP Host header)
+      - "traefik.http.routers.zitadel-login-lan.rule=Host(`10.200.0.125`) && PathPrefix(`/ui/v2/login`)"
+      - "traefik.http.routers.zitadel-login-lan.entrypoints=web"
+      - "traefik.http.routers.zitadel-login-lan.priority=240"
+      - "traefik.http.routers.zitadel-login-lan.service=zitadel-login"
+      - "traefik.http.routers.zitadel-login-lan.middlewares=ratelimit-auth@file,strip-hsts-login"
       - "traefik.http.services.zitadel-login.loadbalancer.server.port=3000"
 
   traefik:
