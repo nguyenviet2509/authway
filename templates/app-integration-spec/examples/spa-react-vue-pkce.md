@@ -61,8 +61,17 @@ export async function handleCallback() {
   return await userManager.signinRedirectCallback();
 }
 
+// Purist SSO default — local clear, KHÔNG hit Zitadel end_session.
+// Zitadel SSO session preserved → user click Login lại → silent SSO.
+// Xem SPEC § 6.5.
 export async function logout() {
-  await userManager.signoutRedirect();
+  await userManager.removeUser();
+  window.location.href = '/login';  // land app own /login landing
+}
+
+// Secondary — share-machine only. KHÔNG dùng làm default.
+export async function logoutFromSSO() {
+  await userManager.signoutRedirect();  // hit /oidc/v1/end_session
 }
 
 export async function getUser() {
@@ -251,7 +260,7 @@ https://myapp.example.com {
 3. Wrap app trong `<AuthProvider>`
 4. Wrap protected routes trong `<Protected>`
 5. Replace hardcoded auth check bằng `useAuth()`
-6. Update logout button → `logout()` (redirect Zitadel end_session tự động)
+6. Update logout button → `logout()` (Purist SSO — local clear + land `/login`; xem SPEC § 6.5)
 7. `.env` prefix biến với `VITE_` (Vite) hoặc `REACT_APP_` (CRA)
 
 ## Validation

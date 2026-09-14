@@ -83,7 +83,7 @@ https://app.example.com {
 - Callback endpoint nhận `code` → POST `{OIDC_ISSUER}/oauth/v2/token` → nhận `access_token` + `id_token`
 - Verify `id_token` signature via JWKS (`{OIDC_ISSUER}/oauth/v2/keys`) — CACHE 1h
 - Extract identity từ `id_token.email` + roles từ `id_token["urn:zitadel:iam:org:project:roles"]`
-- `/logout` → clear local session → redirect `{OIDC_ISSUER}/oidc/v1/end_session?client_id=...&post_logout_redirect_uri=...`
+- `/logout` → clear local session → redirect app own `/login` landing (KHÔNG hit `end_session` Zitadel — Purist SSO policy § 6.5)
 
 **App changes required:**
 - Add OIDC library (framework-appropriate — xem examples/)
@@ -178,10 +178,79 @@ Chạy TRƯỚC khi báo done:
 - [ ] (Pattern B) `state`, `nonce`, PKCE `code_challenge` được tạo random per-request
 - [ ] (Pattern B) JWT verify dùng JWKS (không hardcode public key)
 - [ ] (Pattern B) `iss` + `aud` + `exp` được verify
-- [ ] Sign-out chain: local session cleared + redirect `/oauth2/sign_out` (A) hoặc `end_session` (B)
+- [ ] Sign-out chain: local session cleared + land trên app own `/login` (Purist SSO § 6.5). KHÔNG hit `end_session` Zitadel default.
 - [ ] Health check endpoint (`/health`, `/ready`) bypass IAP (nếu có ops monitor)
 - [ ] `.gitignore` chứa `.env`
 - [ ] README/AGENTS.md app cập nhật env vars cần set
+
+---
+
+## 6.5 Logout pattern — Purist SSO (org-wide policy 2026-09-14)
+
+**Rule:** logout mọi app = **local clear only**. KHÔNG hit `{OIDC_ISSUER}/oidc/v1/end_session` mặc định. Zitadel SSO session (10 ngày `externalLoginCheckLifetime`) preserved → user click Login lại → silent SSO → back vào app không picker IdP + không nhập credentials.
+
+**Vì sao:** SSO promise = login once, access many apps. End_session mỗi lần logout = phá promise (user phải chọn lại IdP + credentials cho mỗi app) → SSO trở nên vô nghĩa.
+
+### Snippet chuẩn theo framework
+
+**SPA React (oidc-client-ts / react-oidc-context):**
+```typescript
+// header/menu Đăng xuất button
+async function handleLogout() {
+  await auth.removeUser();
+  window.location.href = '/login';  // app own /login landing với button "Đăng nhập"
+}
+
+// KHÔNG: auth.signoutRedirect() — hit end_session, phá SSO
+```
+
+**Backend Next.js (Auth.js):**
+```typescript
+// /api/auth/signout POST handler
+import { signOut } from '@/auth';
+await signOut({ redirectTo: '/login' });  // callbackUrl = app /login (NOT Zitadel end_session)
+```
+
+**Backend Express (openid-client):**
+```javascript
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => res.redirect('/login'));  // clear cookie + land /login
+  // KHÔNG: res.redirect(`${OIDC_ISSUER}/oidc/v1/end_session?...`)
+});
+```
+
+**Grafana (native OIDC):**
+```yaml
+# docker-compose: KHÔNG set GF_AUTH_GENERIC_OAUTH_SIGNOUT_REDIRECT_URL
+# Grafana logout → clear cookie → land Grafana /login (built-in) — user thấy button "Sign in with Zitadel"
+```
+
+**oauth2-proxy IAP sidecar (Pattern A):**
+```
+# .cfg: KHÔNG cần config gì đặc biệt. Default `/oauth2/sign_out` chỉ clear proxy cookie, không hit Zitadel end_session.
+# Reverse proxy handler:
+handle /logout {
+  redir /oauth2/sign_out?rd=/login 302
+}
+```
+
+### Exception — cho case share-machine
+
+Add nút RIÊNG "Đăng xuất khỏi SSO" (explicit, không default). Nút này gọi `end_session` full:
+```typescript
+// SPA: secondary button
+async function handleLogoutSSO() {
+  await auth.signoutRedirect();  // hit /oidc/v1/end_session → terminate Zitadel session
+}
+```
+
+Rare use case — chỉ add khi member yêu cầu rõ (banking, HR admin, shared workstation policy).
+
+### Reference implementation
+
+- `central-rbac-ui/src/components/layout/header.tsx` — soft logout default
+- `central-rbac-ui/src/auth/protected-route.tsx` — hard logout (403 page "Đăng xuất & đổi tài khoản")
+- OneLog `docs/authway-iap-onboarding.md` § 3.5 — pattern cho onboarding apps mới
 
 ---
 
@@ -205,7 +274,7 @@ Chạy TRƯỚC khi báo done:
 | Cookie oversize >4KB, browser reject | User có nhiều UserGrant → roles claim lớn | AI: switch scope-limited claim `urn:zitadel:iam:org:project:id:{CLIENT_ID}:roles` — chỉ khi Central admin đã enable |
 | Header `X-Auth-Request-Email` empty ở Pattern A | oauth2-proxy chưa auth hoặc `copy_headers` thiếu | AI: verify Caddyfile / Traefik middleware `copy_headers` list |
 | JWT verify fail `kid not found` | JWKS cache stale sau Zitadel rotate | AI: force refresh JWKS, KHÔNG cache expired kid |
-| Sign-out không clear Zitadel session | Chỉ clear local session | AI: add end_session redirect chain |
+| Sign-out không clear Zitadel session | **BY DESIGN (Purist SSO)** — Zitadel session preserved cho SSO seamless. Add "Đăng xuất khỏi SSO" button riêng nếu cần share-machine flow | AI: KHÔNG add end_session default. Nếu member yêu cầu → add secondary button explicit |
 | App accessible từ IP LAN bypass reverse proxy | App bind 0.0.0.0 | AI: rebind 127.0.0.1, verify `ss -tlnp` |
 
 ---

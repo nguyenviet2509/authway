@@ -156,14 +156,29 @@ export default function RootLayout({ children }) {
 }
 ```
 
-### Sign-out chain (Zitadel end_session)
+### Sign-out — Purist SSO (default, RECOMMENDED)
 
-Auth.js v5 sign-out mặc định KHÔNG call Zitadel `end_session` → Zitadel session vẫn còn.
-
-Force end_session redirect:
+Auth.js v5 `signOut()` mặc định clear local session + KHÔNG call Zitadel `end_session`. **Đây chính là behavior đúng theo Purist SSO policy** (org-wide, xem SPEC § 6.5). Zitadel session preserved → user click Login lại → silent SSO.
 
 ```typescript
-// app/api/auth/signout-full/route.ts
+// app/(auth)/logout/page.tsx (hoặc /api/auth/signout POST handler)
+import { signOut } from "@/auth";
+await signOut({ redirectTo: "/login" });  // clear local, land app /login
+```
+
+Logout link mặc định của Auth.js:
+```html
+<form action="/api/auth/signout" method="post">
+  <button type="submit">Đăng xuất</button>
+</form>
+```
+
+### Sign-out full (end_session) — chỉ khi cần share-machine
+
+Add secondary button explicit "Đăng xuất khỏi SSO" cho case share workstation / banking policy. KHÔNG dùng làm default.
+
+```typescript
+// app/api/auth/signout-full/route.ts  (secondary, không default)
 import { signOut } from "@/auth";
 import { NextResponse } from "next/server";
 
@@ -171,18 +186,15 @@ export async function POST() {
   await signOut({ redirect: false });
   const endSessionUrl = new URL("/oidc/v1/end_session", process.env.AUTH_ZITADEL_ISSUER);
   endSessionUrl.searchParams.set("client_id", process.env.AUTH_ZITADEL_ID!);
-  endSessionUrl.searchParams.set(
-    "post_logout_redirect_uri",
-    process.env.AUTH_URL!,
-  );
+  endSessionUrl.searchParams.set("post_logout_redirect_uri", process.env.AUTH_URL!);
   return NextResponse.redirect(endSessionUrl);
 }
 ```
 
-Logout link:
+Logout link secondary:
 ```html
 <form action="/api/auth/signout-full" method="post">
-  <button type="submit">Sign out</button>
+  <button type="submit">Đăng xuất khỏi SSO (share máy)</button>
 </form>
 ```
 
@@ -268,6 +280,6 @@ curl -s https://zitadel.000nethost.com/.well-known/openid-configuration | jq .is
 |---|---|
 | `redirect_uri_mismatch` | REDIRECT_URL khai với admin phải EXACT = `https://<host>/api/auth/callback/zitadel` |
 | Session không có roles | Verify `jwt` callback extract `urn:zitadel:iam:org:project:roles` — enable trong Zitadel project setting |
-| Sign-out không clear Zitadel | Dùng `/api/auth/signout-full` route, không phải `signOut()` mặc định |
+| Sign-out không clear Zitadel | **BY DESIGN Purist SSO** — `signOut()` default preserve Zitadel session cho SSO seamless. Chỉ dùng `/api/auth/signout-full` khi share-machine (secondary button) |
 | `AUTH_SECRET` missing | Set `AUTH_SECRET` env — generate `openssl rand -base64 32` |
 | HTTPS behind proxy Auth.js dùng http URL | Set `AUTH_URL=https://<host>` env explicit |

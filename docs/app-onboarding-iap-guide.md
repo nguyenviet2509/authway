@@ -130,7 +130,7 @@ proxy_set_header X-Onemcp-User $username;
 | **Go net/http** | `email := r.Header.Get("X-Auth-Request-Email")` |
 | **Django** | `MIDDLEWARE += ["django.contrib.auth.middleware.RemoteUserMiddleware"]` + set `REMOTE_USER` from header |
 
-Logout: `<a href="/oauth2/sign_out?rd=<ZITADEL_LOGOUT_URL>">Sign out</a>`
+Logout — **Purist SSO** (org policy 2026-09-14): `<a href="/oauth2/sign_out?rd=/">Sign out</a>` — clear proxy cookie, land app root. KHÔNG chain tới Zitadel `end_session` (phá SSO seamless). Xem SPEC § 6.5.
 
 ### 5. Test
 
@@ -154,7 +154,7 @@ Done.
 | App hiển thị UUID thay username | Claim mapping mặc định = `sub` | `user_id_claim = "preferred_username"` |
 | "Invalid username format" backend | Backend regex reject full email | Nginx map strip `@domain` (xem step 3) |
 | Login xong không redirect về app | Multi-page flow (MFA/change password) mất session cookie trên HTTP+IP | Ops disable ForceMFA + PasswordChangeRequired ở Zitadel (đã fix ở prod pilot) |
-| Signout redirect nhiều bước | Chain oauth2-proxy → Zitadel end_session chưa set | Set `WEBUI_AUTH_SIGNOUT_REDIRECT_URL=/oauth2/sign_out?rd=<zitadel_end_session>` |
+| Signout không end Zitadel session | **BY DESIGN Purist SSO** — Zitadel session preserved cho SSO seamless. Chỉ chain end_session khi share-machine (secondary button explicit) |
 | Broken images/CSS ở login sidecar | Zitadel API_URL = internal Docker alias | Set `ZITADEL_API_URL = http://<external_host>` (public URL) |
 
 ## When NOT to use IAP
