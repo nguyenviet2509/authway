@@ -18,7 +18,7 @@ pnpm add next-auth@beta
 # Cấp bởi Central RBAC portal
 AUTH_ZITADEL_ID=387047455193104387          # = CLIENT_ID
 AUTH_ZITADEL_SECRET=xxxxxxxxxxxxxxxxxxxxx   # = CLIENT_SECRET
-AUTH_ZITADEL_ISSUER=http://10.200.0.125     # = OIDC_ISSUER
+AUTH_ZITADEL_ISSUER=https://zitadel.000nethost.com   # = OIDC_ISSUER (canonical)
 
 # NextAuth
 AUTH_SECRET=change-me-32-random-base64-secret
@@ -255,8 +255,8 @@ curl -sI http://127.0.0.1:3000/
 # Expect: 200 hoặc redirect signin
 
 # 2. Discovery
-curl -s http://10.200.0.125/.well-known/openid-configuration | jq .issuer
-# Expect: "http://10.200.0.125"
+curl -s https://zitadel.000nethost.com/.well-known/openid-configuration | jq .issuer
+# Expect: "https://zitadel.000nethost.com"
 
 # 3. Browser flow
 # → https://myapp.example.com → redirect signin → Zitadel → callback → dashboard

@@ -24,7 +24,7 @@ Pin `^3.0.1`.
 
 ```env
 # Vite/CRA prefix env với VITE_ hoặc REACT_APP_ để expose browser
-VITE_OIDC_ISSUER=http://10.200.0.125
+VITE_OIDC_ISSUER=https://zitadel.000nethost.com
 VITE_OIDC_CLIENT_ID=387047455193104387
 VITE_APP_HOST=https://myapp.example.com
 ```
@@ -262,7 +262,7 @@ npm run build
 ls -la dist/index.html
 
 # 2. Discovery reachable
-curl -s http://10.200.0.125/.well-known/openid-configuration | jq .authorization_endpoint
+curl -s https://zitadel.000nethost.com/.well-known/openid-configuration | jq .authorization_endpoint
 
 # 3. Browser flow
 # → https://myapp.example.com/ → auto-redirect Zitadel authorize (PKCE challenge in URL)

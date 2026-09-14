@@ -47,7 +47,7 @@ oauth2-proxy:
 
 ```ini
 provider = "oidc"
-oidc_issuer_url = "http://<ZITADEL_HOST>"     # http://10.200.0.125 hoặc https://auth.inet.vn
+oidc_issuer_url = "https://<ZITADEL_HOST>"    # canonical https://zitadel.000nethost.com (LAN callers add extra_hosts split-brain DNS)
 client_id = "<CLIENT_ID>"
 client_secret = "<CLIENT_SECRET>"
 redirect_url = "http://<APP_HOST>/oauth2/callback"

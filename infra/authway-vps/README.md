@@ -67,14 +67,17 @@ docker compose logs -f --tail 100
 # Container status (all should be Up/healthy after ~2 min)
 docker compose ps
 
-# Zitadel ready check
-curl -sv http://10.200.0.125/debug/ready
+# Zitadel ready check (canonical HTTPS domain post 2026-09-05 swap)
+curl -sv https://zitadel.000nethost.com/debug/ready
 
 # Console loads
-curl -sI http://10.200.0.125/ui/console/
+curl -sI https://zitadel.000nethost.com/ui/console/
 
 # Login V2 healthy
-curl -sI http://10.200.0.125/ui/v2/login/healthy
+curl -sI https://zitadel.000nethost.com/ui/v2/login/healthy
+
+# LAN-IP fallback (legacy in-VPC callers) — Traefik zitadel-lan router
+curl -sI -H 'Host: 10.200.0.125' http://127.0.0.1/debug/ready
 
 # Zitadel logs (look for "listening" or "ready")
 docker compose logs zitadel --tail 50 | grep -iE "listen|ready|error"
@@ -86,7 +89,7 @@ Expected ready response: `HTTP/1.1 200 OK`
 
 ## First Login
 
-1. Open browser: `http://10.200.0.125/ui/console/`
+1. Open browser: `https://zitadel.000nethost.com/ui/console/`
 2. Login: `zitadel-admin` / `<password from .env>`
 3. System prompts password change on first login (PasswordChangeRequired=true)
 4. Set new password, save securely

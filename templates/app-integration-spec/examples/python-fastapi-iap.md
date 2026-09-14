@@ -10,7 +10,7 @@ App backend Python dùng FastAPI/Flask/Django. Refactor delta ~5 dòng.
 
 ```env
 # Cấp bởi Central RBAC portal
-OIDC_ISSUER=http://10.200.0.125
+OIDC_ISSUER=https://zitadel.000nethost.com
 CLIENT_ID=387047455193104387
 CLIENT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxx
 
