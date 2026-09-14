@@ -10,6 +10,11 @@ sources:
       - authway-prod-zitadel-login-1
       - authway-prod-postgres-1
       - authway-prod-traefik-1
+      # Central RBAC (co-located on authway-vps, no `authway-prod-` prefix) —
+      # backend emits Fastify pino JSON access log for SSO trace;
+      # UI emits nginx access log (browser IP via X-Forwarded-For).
+      - central-rbac
+      - central-rbac-ui
     exclude_containers:
       - authway-prod-vector-1
 
