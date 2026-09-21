@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<!-- saved from url=(0107)file:///C:/Users/KIEU%20HIEN/Downloads/Telegram%20Desktop/central-management-zitadel-rbac-architecture.html -->
+<html lang="vi"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Central Management Architecture - ZITADEL + RBAC</title>
+<style>
+    :root {
+        --bg: #f5f7fb;
+        --card: #ffffff;
+        --text: #172033;
+        --muted: #5f6b7a;
+        --border: #dce2ea;
+        --accent: #315efb;
+        --accent-soft: #eef2ff;
+        --code: #f3f5f8;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+        color: var(--text);
+        background: var(--bg);
+        line-height: 1.6;
+    }
+    .container {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 40px 24px 64px;
+    }
+    h1 { font-size: 32px; margin: 0 0 10px; }
+    h2 { margin-top: 42px; font-size: 24px; }
+    h3 { margin-top: 28px; font-size: 19px; }
+    .subtitle { color: var(--muted); margin-bottom: 30px; }
+    .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 24px;
+        margin: 18px 0;
+        box-shadow: 0 3px 14px rgba(20, 30, 50, .04);
+    }
+    .central {
+        border: 2px solid var(--accent);
+        background: var(--accent-soft);
+    }
+    .architecture {
+        overflow-x: auto;
+        background: #101522;
+        color: #e8edf7;
+        border-radius: 12px;
+        padding: 24px;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        white-space: pre;
+    }
+    .flow {
+        overflow-x: auto;
+        background: var(--code);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px;
+        font-family: "SFMono-Regular", Consolas, monospace;
+        white-space: pre;
+        font-size: 13px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 14px;
+        background: white;
+    }
+    th, td {
+        border: 1px solid var(--border);
+        padding: 12px 14px;
+        text-align: left;
+        vertical-align: top;
+    }
+    th { background: #f0f3f8; }
+    code {
+        background: var(--code);
+        padding: 2px 5px;
+        border-radius: 5px;
+        font-family: monospace;
+    }
+    .principle {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+    }
+    .principle .card { margin: 0; }
+    .tag {
+        display: inline-block;
+        background: var(--accent-soft);
+        color: #2346c7;
+        padding: 4px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+    footer {
+        margin-top: 48px;
+        color: var(--muted);
+        font-size: 13px;
+        border-top: 1px solid var(--border);
+        padding-top: 20px;
+    }
+    @media (max-width: 760px) {
+        .principle { grid-template-columns: 1fr; }
+        h1 { font-size: 26px; }
+    }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Central Management Architecture</h1>
+<p class="subtitle">
+    Kiến trúc quản lý tập trung sử dụng ZITADEL cho Identity/Authentication và RBAC tập trung,
+    kết hợp với ACL/resource authorization riêng tại từng Application.
+</p>
+
+<div class="card central">
+    <span class="tag">KIẾN TRÚC KHUYẾN NGHỊ</span>
+    <p>
+        <strong>Central Management quyết định "user được làm gì"</strong>,
+        còn <strong>Application quyết định "được làm trên resource nào"</strong>.
+    </p>
+</div>
+
+<h2>1. Architecture tổng thể</h2>
+
+<div class="architecture">                                  ┌──────────────────────────────┐
+                                  │      CENTRAL MANAGEMENT       │
+                                  │                              │
+                                  │          ZITADEL             │
+                                  │  ┌────────────────────────┐  │
+                                  │  │ Identity / SSO / MFA   │  │
+                                  │  │ User / Group / Org     │  │
+                                  │  │ OAuth2 / OIDC          │  │
+                                  │  └────────────┬───────────┘  │
+                                  │               │              │
+                                  │               ▼              │
+                                  │  ┌────────────────────────┐  │
+                                  │  │         RBAC            │  │
+                                  │  │                        │  │
+                                  │  │ Role                   │  │
+                                  │  │ Permission             │  │
+                                  │  │ Role → Permission       │  │
+                                  │  │ User/Group → Role       │  │
+                                  │  │ Scope / Application     │  │
+                                  │  └────────────┬───────────┘  │
+                                  │               │              │
+                                  └───────────────┼──────────────┘
+                                                  │
+                         ┌────────────────────────┼────────────────────────┐
+                         │                        │                        │
+                    OIDC/OAuth2               RBAC/Claims             Policy
+                         │                        │                        │
+                         ▼                        ▼                        ▼
+              ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+              │   Application 1  │     │   Application 2  │     │   Application N  │
+              │                  │     │                  │     │                  │
+              │  Cloud Panel     │     │  S3 Panel        │     │  Monitoring      │
+              │                  │     │                  │     │                  │
+              │  AuthN           │     │  AuthN           │     │  AuthN           │
+              │  AuthZ           │     │  AuthZ           │     │  AuthZ           │
+              │  Local ACL       │     │  Local ACL       │     │  Local ACL       │
+              └────────┬─────────┘     └────────┬─────────┘     └────────┬─────────┘
+                       │                        │                        │
+                       ▼                        ▼                        ▼
+              ┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+              │ Application DB   │     │ Application DB   │     │ Application DB   │
+              │                  │     │                  │     │                  │
+              │ Project ACL      │     │ Bucket ACL       │     │ Dashboard ACL    │
+              │ Resource ACL     │     │ Object ACL       │     │ Alert ACL        │
+              └──────────────────┘     └──────────────────┘     └──────────────────┘</div>
+
+<h2>2. Luồng Authentication / Authorization</h2>
+
+<div class="flow"> User
+   │
+   │ Login
+   ▼
+┌─────────────┐
+│  ZITADEL    │
+└──────┬──────┘
+       │
+       │ ID Token / Access Token
+       │ + roles / claims
+       ▼
+┌──────────────────┐
+│  Application N   │
+└────────┬─────────┘
+         │
+         │ Check:
+         │ Role
+         │ Permission
+         │ Scope
+         ▼
+   ┌───────────────┐
+   │ Application   │
+   │ Authorization │
+   └───────┬───────┘
+           │
+           │ Resource ACL
+           ▼
+      ┌──────────┐
+      │ Resource │
+      └──────────┘</div>
+
+<h2>3. Phân chia trách nhiệm</h2>
+
+<table>
+<thead>
+<tr><th>Layer</th><th>Trách nhiệm</th></tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ZITADEL</strong></td>
+<td>User, Group, Organization, SSO, MFA, Authentication, OAuth2/OIDC</td>
+</tr>
+<tr>
+<td><strong>Central RBAC</strong></td>
+<td>Role, Permission, Role assignment, Application scope</td>
+</tr>
+<tr>
+<td><strong>Application</strong></td>
+<td>Authorization enforcement và xử lý business rules</td>
+</tr>
+<tr>
+<td><strong>Application DB</strong></td>
+<td>Resource-level ACL, ownership, sharing và quan hệ resource</td>
+</tr>
+<tr>
+<td><strong>Resource Backend</strong></td>
+<td>Thực thi quyền cuối cùng trên resource</td>
+</tr>
+</tbody>
+</table>
+
+<h2>4. Ví dụ Central RBAC</h2>
+
+<div class="flow">User: kien
+
+Central RBAC:
+    Role = cloud.operator
+
+Permissions:
+    compute.instance.read
+    compute.instance.create
+    network.read
+    storage.read
+
+Scope:
+    application = cloud-panel
+    organization = customer-a</div>
+
+<p>Application 1 có thể nhận role và permission từ Central Management, nhưng vẫn tự quyết định quyền trên từng resource.</p>
+
+<div class="flow">customer-a
+ ├── project-01 → ALLOW
+ ├── project-02 → ALLOW
+ └── project-03 → DENY</div>
+
+<h2>5. Ví dụ cho S3 Application</h2>
+
+<div class="flow">Role:
+    s3-admin
+
+Permissions:
+    bucket.create
+    bucket.read
+    bucket.delete
+
+Resource ACL:
+    bucket-a → admin
+    bucket-b → read-only</div>
+
+<p>
+    Như vậy Central RBAC quản lý quyền nghiệp vụ ở mức ứng dụng,
+    trong khi S3 Application quản lý ACL ở mức bucket/object.
+</p>
+
+<h2>6. Nguyên tắc thiết kế</h2>
+
+<div class="principle">
+    <div class="card">
+        <span class="tag">CENTRAL</span>
+        <h3>WHO?</h3>
+        <p>User / Group / Organization / Identity</p>
+    </div>
+    <div class="card">
+        <span class="tag">CENTRAL</span>
+        <h3>WHAT?</h3>
+        <p>Role / Permission / Scope / Application access</p>
+    </div>
+    <div class="card">
+        <span class="tag">APPLICATION</span>
+        <h3>WHERE?</h3>
+        <p>Resource / Project / Bucket / Dashboard</p>
+    </div>
+    <div class="card">
+        <span class="tag">APPLICATION</span>
+        <h3>ALLOW / DENY?</h3>
+        <p>Resource ACL và business-specific authorization</p>
+    </div>
+</div>
+
+<h2>7. Permission naming convention</h2>
+
+<p>Nên chuẩn hóa permission theo dạng:</p>
+
+<div class="flow">&lt;service&gt;.&lt;resource&gt;.&lt;action&gt;</div>
+
+<table>
+<thead>
+<tr><th>Permission</th><th>Ý nghĩa</th></tr>
+</thead>
+<tbody>
+<tr><td><code>compute.instance.read</code></td><td>Xem instance</td></tr>
+<tr><td><code>compute.instance.create</code></td><td>Tạo instance</td></tr>
+<tr><td><code>compute.instance.update</code></td><td>Cập nhật instance</td></tr>
+<tr><td><code>compute.instance.delete</code></td><td>Xóa instance</td></tr>
+<tr><td><code>network.network.read</code></td><td>Xem network</td></tr>
+<tr><td><code>network.network.create</code></td><td>Tạo network</td></tr>
+<tr><td><code>storage.bucket.read</code></td><td>Xem bucket</td></tr>
+<tr><td><code>storage.bucket.create</code></td><td>Tạo bucket</td></tr>
+<tr><td><code>storage.bucket.delete</code></td><td>Xóa bucket</td></tr>
+<tr><td><code>monitoring.dashboard.read</code></td><td>Xem dashboard</td></tr>
+</tbody>
+</table>
+
+<h2>8. Ví dụ Role → Permission</h2>
+
+<div class="flow">cloud-viewer
+    ├── compute.instance.read
+    ├── network.network.read
+    ├── storage.bucket.read
+    └── monitoring.dashboard.read
+
+cloud-operator
+    ├── cloud-viewer
+    ├── compute.instance.create
+    ├── compute.instance.update
+    ├── network.network.create
+    └── storage.bucket.create</div>
+
+<h2>9. Mô hình mở rộng</h2>
+
+<div class="architecture">                    ┌─────────────────────┐
+                    │       ZITADEL       │
+                    │ Identity / SSO / MFA│
+                    │ Organization        │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   CENTRAL RBAC      │
+                    │                     │
+                    │ Roles               │
+                    │ Permissions         │
+                    │ Scope               │
+                    └──────────┬──────────┘
+                               │
+               ┌───────────────┼────────────────┐
+               ▼               ▼                ▼
+          Cloud Panel       S3 Panel       Monitoring
+               │               │                │
+               ▼               ▼                ▼
+          OpenStack          RGW          Monitoring DB
+               │               │                │
+               ▼               ▼                ▼
+            Project          Bucket         Dashboard
+              ACL              ACL              ACL</div>
+
+<h2>10. Kết luận</h2>
+
+<div class="card central">
+<p><strong>Architecture đề xuất:</strong></p>
+<ol>
+<li><strong>ZITADEL</strong> làm Identity Provider và Authentication tập trung.</li>
+<li><strong>Central RBAC</strong> quản lý Role, Permission và Scope dùng chung.</li>
+<li>Mỗi <strong>Application</strong> tích hợp OIDC/OAuth2 và sử dụng RBAC từ Central Management.</li>
+<li>Mỗi Application vẫn giữ <strong>resource-level ACL</strong> riêng cho domain của mình.</li>
+<li>Không ép Cloud, S3, Monitoring và các domain khác dùng chung một mô hình resource ACL.</li>
+<li>Khi authorization trở nên phức tạp, có thể bổ sung OpenFGA/SpiceDB/OPA mà không phải thay ZITADEL.</li>
+</ol>
+</div>
+
+<footer>
+    Central Management Architecture — ZITADEL + RBAC + Application-level ACL
+</footer>
+
+</div>
+
+</body></html>

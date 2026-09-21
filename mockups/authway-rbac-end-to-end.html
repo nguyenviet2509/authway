@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Authway RBAC — End-to-End Integration</title>
+<style>
+:root {
+  --bg: #f5f7fb;
+  --card: #ffffff;
+  --text: #172033;
+  --muted: #5f6b7a;
+  --border: #dce2ea;
+  --accent: #315efb;
+  --accent-soft: #eef2ff;
+  --code: #f3f5f8;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --danger: #dc2626;
+  --sec: #7c3aed;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.55;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  max-width: 1440px;
+  margin: 0 auto;
+  gap: 0;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  background: white;
+  border-right: 1px solid var(--border);
+  padding: 24px 0;
+  font-size: 13.5px;
+}
+.sidebar-title {
+  padding: 0 20px 12px;
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 15px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.sidebar-title small { display: block; color: var(--muted); font-weight: 400; font-size: 11px; margin-top: 4px; }
+.sidebar nav ul { list-style: none; margin: 0; padding: 0; }
+.sidebar nav li a {
+  display: block;
+  padding: 8px 20px;
+  color: var(--text);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+}
+.sidebar nav li a:hover { background: var(--accent-soft); color: var(--accent); border-left-color: var(--accent); }
+.sidebar nav .group-title {
+  padding: 14px 20px 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.content { padding: 40px 40px 80px; min-width: 0; }
+
+h1 { font-size: 30px; margin: 0 0 6px; }
+h2 { margin-top: 48px; font-size: 22px; border-bottom: 2px solid var(--border); padding-bottom: 8px; scroll-margin-top: 20px; }
+h3 { margin-top: 24px; font-size: 17px; }
+.subtitle { color: var(--muted); margin-bottom: 24px; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 14px 0;
+  box-shadow: 0 3px 12px rgba(20,30,50,.04);
+}
+.central { border: 2px solid var(--accent); background: var(--accent-soft); }
+.warn { border-left: 4px solid var(--warn); }
+.danger { border-left: 4px solid var(--danger); }
+.sec { border-left: 4px solid var(--sec); }
+.ok { border-left: 4px solid var(--ok); }
+.architecture, .flow {
+  overflow-x: auto;
+  border-radius: 10px;
+  padding: 20px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+.architecture { background: #101522; color: #e8edf7; }
+.flow { background: var(--code); border: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; margin: 12px 0; background: white; font-size: 13.5px; }
+th, td { border: 1px solid var(--border); padding: 10px 12px; text-align: left; vertical-align: top; }
+th { background: #f0f3f8; }
+code { background: var(--code); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12.5px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.tag {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: #2346c7;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.tag.warn { background: #fef3c7; color: #92400e; }
+.tag.danger { background: #fee2e2; color: #991b1b; }
+.tag.sec { background: #ede9fe; color: #5b21b6; }
+.tag.ok { background: #dcfce7; color: #166534; }
+footer { margin-top: 60px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); padding-top: 20px; }
+.legend { display: flex; gap: 20px; flex-wrap: wrap; margin: 12px 0; font-size: 13px; }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.timeline { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin: 16px 0; }
+.timeline .phase {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 12px;
+  text-align: center;
+}
+.timeline .phase .n { font-weight: 700; color: var(--accent); font-size: 15px; }
+.timeline .phase.blocking { border-color: var(--danger); background: #fef2f2; }
+.timeline .phase.deferred { border-style: dashed; opacity: 0.7; }
+
+/* Comparison table */
+.compare th, .compare td { font-size: 13px; padding: 8px 10px; }
+.compare th:first-child { width: 26%; }
+.compare .have { background: #dcfce7; color: #166534; font-weight: 600; }
+.compare .miss { background: #fee2e2; color: #991b1b; font-weight: 600; }
+.compare .partial { background: #fef3c7; color: #92400e; font-weight: 600; }
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .timeline { grid-template-columns: repeat(2, 1fr); }
+  .content { padding: 24px; }
+}
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">
+      Authway RBAC
+      <small>End-to-End Integration</small>
+      <small>plan 260812-1150</small>
+    </div>
+    <nav>
+      <div class="group-title">Big Picture</div>
+      <ul>
+        <li><a href="#overview">1. Kiến trúc tổng thể</a></li>
+        <li><a href="#login-flow">2. End-to-end login flow</a></li>
+        <li><a href="#data-model">3. Data model</a></li>
+      </ul>
+      <div class="group-title">Design details</div>
+      <ul>
+        <li><a href="#permission-naming">4. Permission naming</a></li>
+        <li><a href="#admin-workflows">5. Admin workflows</a></li>
+        <li><a href="#user-sync">6. User sync (Zitadel↔RBAC)</a></li>
+        <li><a href="#security">7. Security layers</a></li>
+        <li><a href="#deployment">8. Deployment topology</a></li>
+        <li><a href="#tech-stack">9. Tech stack chi tiết</a></li>
+      </ul>
+      <div class="group-title">Decision context</div>
+      <ul>
+        <li><a href="#zitadel-alone">10. Zitadel làm được gì</a></li>
+        <li><a href="#gaps">11. Gaps nếu không có RBAC</a></li>
+        <li><a href="#comparison">12. So sánh có/không RBAC</a></li>
+      </ul>
+      <div class="group-title">Delivery</div>
+      <ul>
+        <li><a href="#timeline">13. Phase timeline</a></li>
+        <li><a href="#scope">14. Scope in/out</a></li>
+        <li><a href="#open">15. Open questions</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main class="content">
+
+<h1>Authway RBAC — End-to-End Integration</h1>
+<p class="subtitle">
+  Bức tranh tổng quan: <strong>Zimbra LDAP → ZITADEL (identity) → authway-rbac (roles/permissions) → SDK trong app → per-app resource ACL</strong>. Plan <code>260812-1150-authway-central-rbac</code>.
+</p>
+
+<div class="card central">
+  <span class="tag">CORE PRINCIPLE</span>
+  <p><strong>Zitadel</strong> quyết định <em>bạn là ai</em> (identity, SSO, MFA). <strong>authway-rbac</strong> quyết định <em>bạn được làm gì</em> (roles, permissions). <strong>App</strong> quyết định <em>được làm trên resource nào</em> (per-app ACL).</p>
+</div>
+
+<!-- ========== 1. OVERVIEW ========== -->
+<h2 id="overview">1. Kiến trúc tổng thể</h2>
+
+<div class="architecture">       ┌────────────────────────┐
+       │   Zimbra LDAP           │  ← identity source of truth
+       │  (users, passwords,     │     (đã configure, upstream)
+       │   department metadata)  │
+       └──────────┬──────────────┘
+                  │ LDAP federation (Zitadel bind/search)
+                  ▼
+                    ┌────────────────────────────────────────────────────────────┐
+                    │                    auth-vps  (prod host)                    │
+                    │                                                             │
+                    │   ┌──────────────────┐         ┌──────────────────────┐   │
+                    │   │     ZITADEL      │  webhook│    authway-rbac      │   │
+                    │   │                  │────────▶│                      │   │
+                    │   │ Identity/SSO/MFA │  or     │  Go + Fiber + PG     │   │
+                    │   │ OIDC issuer      │◀────────│  (own container +    │   │
+                    │   │ + LDAP IdP       │  poll   │   own PG container)  │   │
+                    │   │ User/Org         │         │                      │   │
+                    │   │ Postgres         │         │  Postgres (isolated) │   │
+                    │   └────────┬─────────┘         └──────────┬───────────┘   │
+                    │            │                              │               │
+                    │            │ OIDC discovery / JWKS        │ /authz/me     │
+                    │            │                              │ /authz/version│
+                    │            │                              │ /admin/*      │
+                    └────────────┼──────────────────────────────┼───────────────┘
+                                 │                              │
+                                 ▼                              ▼
+                        ┌──────────────────┐          ┌──────────────────────┐
+                        │  oauth2-proxy    │          │  Admin CLI + curl    │
+                        │  (IAP per app)   │          │  (or Web UI Phase4b) │
+                        └────────┬─────────┘          └──────────────────────┘
+                                 │
+                                 │ X-Auth-Request-Email
+                                 │ X-Auth-Request-Access-Token  (Phase 0 spike A)
+                                 ▼
+                        ┌───────────────────────────┐
+                        │       App (OneLog)         │
+                        │  authway-sdk-go            │
+                        │  ├── extract token         │
+                        │  ├── GET /authz/me         │
+                        │  ├── LRU cache 60s         │
+                        │  ├── HEAD version poll 30s │
+                        │  └── RequirePermission()   │
+                        │  Business logic            │
+                        │  Per-app Resource ACL      │
+                        └───────────────────────────┘</div>
+
+<div class="legend">
+  <span><span class="dot" style="background:#94a3b8"></span>Upstream identity (LDAP — federated)</span>
+  <span><span class="dot" style="background:var(--accent)"></span>Central Management (Zitadel + RBAC)</span>
+  <span><span class="dot" style="background:var(--warn)"></span>Boundary (IAP header forwarding)</span>
+  <span><span class="dot" style="background:var(--sec)"></span>App-side (SDK + resource ACL)</span>
+</div>
+
+<div class="card warn">
+  <span class="tag warn">LDAP INTEGRATION (đã configure)</span>
+  <p><strong>Zimbra LDAP</strong> = identity source thật. <strong>Zitadel federate LDAP</strong> — user login qua Zitadel Console, credential verify về LDAP; Zitadel sync metadata (email, department) vào chính nó.</p>
+  <p><strong>authway-rbac KHÔNG nói chuyện trực tiếp với LDAP</strong> — chỉ sync từ Zitadel. Lý do: single source of truth, Zitadel đã translate LDAP → OIDC <code>sub</code>, trust boundary đơn giản, deactivation flow tự động qua session expiry.</p>
+  <p style="font-size:13px; color: var(--muted);">Reference: plan <code>260806-1504-sso-multi-app-zitadel-ldap-rollout</code>.</p>
+</div>
+
+<!-- ========== 2. LOGIN FLOW ========== -->
+<h2 id="login-flow">2. End-to-end login → permission check</h2>
+
+<div class="flow"> User (browser)
+    │
+    │ ① GET https://onelog.example.com/api/silence
+    ▼
+ ┌──────────────────────┐
+ │  Caddy + oauth2-proxy │
+ │  (IAP boundary)       │
+ └──────────┬───────────┘
+            │ ② Chưa có session? → redirect Zitadel /oauth/authorize
+            ▼
+ ┌──────────────────────┐
+ │  ZITADEL Login v2     │  ③ user login qua "Login via LDAP" hoặc password
+ │                       │      Zitadel bind LDAP: verify credential
+ │                       │      + MFA (Zitadel policy)
+ │                       │      + first-login: sync LDAP attrs (email, department)
+ └──────────┬───────────┘
+            │ ④ callback with authorization code
+            ▼
+ ┌──────────────────────┐
+ │  oauth2-proxy         │  ⑤ exchange code → access_token + id_token, cache in cookie
+ └──────────┬───────────┘
+            │ ⑥ forward request to upstream with headers:
+            │    X-Auth-Request-Email: user@company
+            │    X-Auth-Request-User: sub-uuid
+            │    X-Auth-Request-Access-Token: eyJ...  ← Phase 0 spike A dependency
+            ▼
+ ┌──────────────────────┐
+ │  App (OneLog)         │  ⑦ authway-sdk middleware intercepts
+ └──────────┬───────────┘
+            │ ⑧ LRU cache (60s TTL) miss? → GET /authz/me?app=onelog
+            │    Authorization: Bearer <access_token>
+            ▼
+ ┌──────────────────────┐
+ │  authway-rbac         │  ⑨ verify JWT (iss=zitadel, aud contains 'onelog', sig via JWKS)
+ │                       │      resolve sub → users.zitadel_user_id
+ │                       │      check users.deactivated_at IS NULL
+ │                       │      check users.deny_until IS NULL OR expired
+ │                       │      compute effective permissions (JOIN + wildcard expand)
+ └──────────┬───────────┘
+            │ ⑩ Response: {roles, permissions, version}
+            ▼
+ ┌──────────────────────┐
+ │  App SDK              │  ⑪ cache locally; RequirePermission("onelog.alert.silence")
+ │                       │      ✅ found → forward | ❌ missing → 403
+ └──────────┬───────────┘
+            │ ⑫ business logic + resource ACL check
+            ▼
+      ┌──────────┐
+      │  alert   │  ⑬ silence applied, audit event emitted
+      └──────────┘
+
+Background (every 30s):
+ SDK ─── HEAD /authz/version/{user_id} ──▶ authway-rbac
+  ◀── {"version": N}
+ If N != cached_version → invalidate cache, refetch next request</div>
+
+<!-- ========== 3. DATA MODEL ========== -->
+<h2 id="data-model">3. Data model</h2>
+
+<div class="architecture">    applications          permissions           roles              user_roles
+    ───────────           ───────────           ─────              ──────────
+    id                    id                    id                 user_id
+    slug                  app_id                name               role_id
+    name                  name (svc.rsc.act)    app_id             scope JSONB
+                          description           org_id NULL        granted_by
+                          deprecated_at         description        granted_at
+                              │                     │                    │
+                              └──── role_permissions ────┘                │
+                                    ─────────────────                     │
+                                    role_id                               │
+                                    permission_id                         │
+                                    granted_via                           │
+                                     (explicit|                           │
+                                      wildcard_exp)                       │
+                                                                          │
+    users                                                                 │
+    ─────                                                                 │
+    id ◀──────────────────────────────────────────────────────────────────┘
+    zitadel_user_id UNIQUE
+    email
+    deactivated_at
+    deny_until
+    permissions_version    ← bump on assignment change → SDK poll detects
+    zitadel_sequence        ← version guard cho webhook race
+    metadata JSONB          ← department (từ LDAP qua Zitadel)
+
+
+    audit_log              break_glass_tokens        user_roles_archived
+    ─────────              ─────────────────         ──────────────────
+    actor_user_id          token_sha256              (mirror user_roles +
+    action                 created_at                 archived_at, reason)
+    target_type            rotated_at
+    target_id              last_used_at
+    payload JSONB          note
+    prev_hash              ← hash chain (F10 tamper evidence)
+    row_hash
+    at (timestamptz UTC)</div>
+
+<h3>Key columns rationale</h3>
+<table>
+<tr><th>Column</th><th>Purpose</th></tr>
+<tr><td><code>users.permissions_version</code></td><td>Bump khi assignment thay đổi → SDK poll HEAD phát hiện, invalidate cache local (thay Redis pub-sub)</td></tr>
+<tr><td><code>users.deny_until</code></td><td>Emergency revocation; SDK check bất kể cache</td></tr>
+<tr><td><code>users.zitadel_sequence</code></td><td>Version guard race webhook + reconcile</td></tr>
+<tr><td><code>role_permissions.granted_via</code></td><td><code>explicit</code> vs <code>wildcard_expansion</code> — audit trail nguồn grant</td></tr>
+<tr><td><code>roles.org_id NULL</code></td><td>Single-org first, schema-ready cho multi-org</td></tr>
+<tr><td><code>audit_log.prev_hash + row_hash</code></td><td>Hash chain tamper-evidence + ship real-time sang OneLog rsyslog</td></tr>
+</table>
+
+<!-- ========== 4. PERMISSION NAMING ========== -->
+<h2 id="permission-naming">4. Permission naming + OneLog dogfood seed</h2>
+
+<div class="grid2">
+  <div class="card">
+    <span class="tag">NAMING SPEC</span>
+    <h3>&lt;service&gt;.&lt;resource&gt;.&lt;action&gt;</h3>
+    <p>Kebab-case, singular resource, verb action.</p>
+    <ul>
+      <li><code>service</code>: <code>onelog</code>, <code>cloud</code>, <code>s3</code>, <code>monitoring</code></li>
+      <li><code>resource</code>: <code>topic</code>, <code>alert</code>, <code>dashboard</code>, <code>bucket</code></li>
+      <li><code>action</code>: <code>read</code>, <code>list</code>, <code>create</code>, <code>update</code>, <code>delete</code>, <code>silence</code>, <code>ack</code></li>
+    </ul>
+    <p><strong>Wildcard</strong>: cho phép <code>svc.resource.*</code>. <span class="tag danger">CẤM</span> <code>*.*</code> (F4 — silent priv esc).</p>
+  </div>
+  <div class="card">
+    <span class="tag ok">ONELOG SEED (Validation V4)</span>
+    <h3>Dogfood targets: Grafana + VMAlert</h3>
+    <div class="flow" style="padding:12px; font-size:12px;">Permissions:
+  onelog.grafana.read
+  onelog.grafana.admin
+  onelog.alert.read
+  onelog.alert.silence
+  onelog.alert.ack
+  onelog.alert.create
+  onelog.dashboard.read
+  onelog.dashboard.create
+
+Roles (explicit, no *.*):
+  onelog.viewer
+    ├── onelog.grafana.read
+    ├── onelog.alert.read
+    └── onelog.dashboard.read
+
+  onelog.oncall (inherits viewer +)
+    ├── onelog.alert.silence
+    └── onelog.alert.ack
+
+  onelog.admin (explicit ~10)
+    └── all onelog.* enumerated</div>
+  </div>
+</div>
+
+<!-- ========== 5. ADMIN WORKFLOWS ========== -->
+<h2 id="admin-workflows">5. Admin workflows</h2>
+
+<div class="grid2">
+  <div class="card">
+    <span class="tag">GRANT ROLE</span>
+    <h3>CLI (Phase 4a — 1 ngày)</h3>
+    <div class="flow" style="font-size:12px; padding:12px;">$ authway-rbac assign \
+    --user=trihd@inet.vn \
+    --role=onelog.oncall
+
+→ Resolve email → Zitadel sub
+→ Upsert users (lazy sync if missing)
+→ INSERT user_roles
+→ Bump users.permissions_version
+→ Emit audit_log (hash-chained)
+→ Ship stdout → OneLog rsyslog
+→ SDK poll notices ≤ 30s</div>
+  </div>
+  <div class="card">
+    <span class="tag warn">EMERGENCY REVOKE</span>
+    <h3>Immediate deny (bypass cache)</h3>
+    <div class="flow" style="font-size:12px; padding:12px;">$ authway-rbac deny-now \
+    --user=trihd@inet.vn \
+    --until=2026-12-31T00:00Z \
+    --reason="incident-42"
+
+→ SET users.deny_until = ...
+→ SDK check on every request → 403
+→ Audit: severity=critical
+→ Alert phòng KT</div>
+  </div>
+</div>
+
+<div class="card sec">
+  <span class="tag sec">BREAK-GLASS (Zitadel down)</span>
+  <ol>
+    <li>Zitadel outage → cannot login Admin UI or verify JWT</li>
+    <li>Retrieve break-glass token from sealed secret (phòng KT)</li>
+    <li><code>curl -H "X-Break-Glass-Token: &lt;token&gt;" https://rbac.auth/admin/...</code></li>
+    <li>authway-rbac bypasses JWT verify, executes with actor=<code>break-glass:&lt;hostname&gt;</code></li>
+    <li>Emit metric <code>authway_break_glass_used_total</code> → alert</li>
+    <li>Post-incident: <code>authway-rbac break-glass rotate</code> → new token</li>
+  </ol>
+</div>
+
+<!-- ========== 6. USER SYNC ========== -->
+<h2 id="user-sync">6. Zitadel ↔ authway user sync</h2>
+
+<div class="card warn">
+  <span class="tag warn">PHASE 0 SPIKE B GATES THIS</span>
+  <p>Nếu Zitadel v4 Actions V2 hỗ trợ webhook lifecycle events → <strong>Option A</strong> (real-time). Nếu không → <strong>Option B</strong> (lazy + reconcile).</p>
+</div>
+
+<div class="grid2">
+  <div class="card ok">
+    <span class="tag ok">OPTION A (preferred)</span>
+    <div class="flow" style="font-size:12px; padding:12px;">Zitadel event (user.added/changed/
+                deactivated/removed)
+      │
+      │ HTTP POST + HMAC(timestamp||body)
+      ▼
+authway-rbac POST /internal/sync/user
+  ├── verify HMAC + timestamp skew ≤ 5min
+  ├── dedup (event_id, ts) in-mem LRU
+  ├── check event.change_date > local
+  ├── upsert users + bump version
+  └── audit + invalidate cache
+
++ Reconcile every 5min:
+  list Zitadel users → diff → upsert
+  Alert: drift > 1% OR > 10
+  OR webhook_events rate = 0 15min</div>
+  </div>
+  <div class="card">
+    <span class="tag warn">OPTION B (fallback)</span>
+    <div class="flow" style="font-size:12px; padding:12px;">/authz/me arrives với unknown sub
+      │
+      ▼
+authway-rbac
+  ├── verify JWT (Zitadel issuer)
+  ├── extract sub
+  ├── users.zitadel_user_id
+  │   ├── FOUND → normal flow
+  │   └── MISSING → fetch Zitadel API
+  │       upsert users, proceed
+  └── Deactivate detected via:
+      - Zitadel session expires
+      - Periodic reconcile flags stale</div>
+  </div>
+</div>
+
+<!-- ========== 7. SECURITY ========== -->
+<h2 id="security">7. Security layers</h2>
+
+<div class="grid3">
+  <div class="card sec">
+    <span class="tag sec">IDENTITY</span>
+    <h3>Zitadel</h3>
+    <ul style="font-size:13px;">
+      <li>LDAP federation (Zimbra)</li>
+      <li>MFA enforce policy</li>
+      <li>OIDC PKCE</li>
+      <li>JWT signed (JWKS rotate)</li>
+      <li>Event-sourced audit</li>
+    </ul>
+  </div>
+  <div class="card sec">
+    <span class="tag sec">TRANSPORT</span>
+    <h3>IAP boundary</h3>
+    <ul style="font-size:13px;">
+      <li>oauth2-proxy per app</li>
+      <li>Caddy TLS + IP allowlist</li>
+      <li>Trust IAP header từ allowlisted upstream</li>
+      <li>Reject direct requests</li>
+    </ul>
+  </div>
+  <div class="card sec">
+    <span class="tag sec">AUTHZ</span>
+    <h3>authway-rbac</h3>
+    <ul style="font-size:13px;">
+      <li>JWT verify (iss + aud + sig)</li>
+      <li>client_id allowlist</li>
+      <li>Rate limit per user</li>
+      <li>Bootstrap CLI one-shot fuse</li>
+      <li>Break-glass audit + alert</li>
+      <li>DB role split (audit INSERT-only)</li>
+      <li>Hash-chain audit rows</li>
+    </ul>
+  </div>
+</div>
+
+<h3>Threat model quick-map</h3>
+<table>
+<tr><th>Attack</th><th>Defense</th></tr>
+<tr><td>Compromised app leaks user token</td><td><code>aud</code> claim binding</td></tr>
+<tr><td>Malicious PR add permission</td><td>Wildcard <code>*.*</code> cấm; impact analysis mandatory</td></tr>
+<tr><td>Admin escalates via bootstrap CLI</td><td>One-shot fuse + audit + token file 0400 + alert</td></tr>
+<tr><td>Attacker replays webhook</td><td>Timestamp signed + dedup LRU + version guard</td></tr>
+<tr><td>Admin tampers audit log</td><td>DB role INSERT-only + hash chain + real-time ship rsyslog</td></tr>
+<tr><td>Cache serves stale after revoke</td><td><code>deny_until</code> checked always + version poll 30s + TTL 60s</td></tr>
+<tr><td>Zitadel down blocks admin</td><td>Break-glass token bypass JWT verify</td></tr>
+</table>
+
+<!-- ========== 8. DEPLOYMENT ========== -->
+<h2 id="deployment">8. Deployment topology</h2>
+
+<div class="architecture">   auth-vps  (single VPS, Docker Compose)
+   ┌─────────────────────────────────────────────────────────────────────┐
+   │  ┌─────────────┐   ┌──────────────┐   ┌──────────────────┐         │
+   │  │   Traefik   │───│    Zitadel   │───│  zitadel-pg      │         │
+   │  │  (TLS/route)│   │  (v4.15+)    │   │  (own container) │         │
+   │  └──────┬──────┘   └──────────────┘   └──────────────────┘         │
+   │         │                                                            │
+   │         │  auth.example.com/       → zitadel                        │
+   │         │  rbac.auth.example.com/  → authway-rbac                   │
+   │         │                                                            │
+   │         │          ┌────────────────┐  ┌──────────────────┐         │
+   │         └─────────▶│  authway-rbac  │──│  authway-rbac-pg │         │
+   │                    │  Go/Fiber      │  │  ISOLATED        │         │
+   │                    │  in-mem LRU    │  │  Own volume/backup│        │
+   │                    └────────────────┘  └──────────────────┘         │
+   └─────────────────────────────────────────────────────────────────────┘
+
+   onelog-vps  (app host)
+   ┌───────────────────────────────────────────────────────────┐
+   │  Caddy ── oauth2-proxy ── OneLog services                 │
+   │                            ├── Grafana (SDK gated)         │
+   │                            ├── alertmanager (silence gate) │
+   │                            ├── vmagent, vlogs             │
+   │                            └── OpenWebUI                   │
+   └───────────────────────────────────────────────────────────┘
+                              │
+                              │ HTTPS /authz/me
+                              ▼
+                    (rbac.auth.example.com)</div>
+
+<!-- ========== 9. TECH STACK ========== -->
+<h2 id="tech-stack">9. Tech stack chi tiết</h2>
+
+<p>Chọn theo tiêu chí: <strong>KISS + tận dụng ecosystem OneLog hiện có (Go, Docker Compose, PG, Traefik) + tránh dependency thừa</strong>.</p>
+
+<h3>Backend service (<code>authway-rbac</code>)</h3>
+<table>
+<tr><th style="width:22%;">Component</th><th style="width:26%;">Choice</th><th>Lý do</th></tr>
+<tr><td><strong>Language</strong></td><td>Go 1.22+</td><td>Static binary ~15MB, low memory, ecosystem OneLog đã Go, native concurrency cho reconcile loop + JWKS refresh</td></tr>
+<tr><td><strong>HTTP framework</strong></td><td>Fiber v3 (fasthttp)</td><td>Perf tốt (10x <code>net/http</code> ở edge case), API familiar Express-like, middleware ecosystem sẵn. Alt: <code>chi</code> nếu team prefer <code>net/http</code></td></tr>
+<tr><td><strong>Postgres driver</strong></td><td><code>pgx/v5</code></td><td>Native PG protocol, pool built-in, hỗ trợ <code>timestamptz</code>, <code>JSONB</code>, LISTEN/NOTIFY (không dùng nhưng available). Không dùng ORM (KISS — raw SQL trong <code>repository/</code>)</td></tr>
+<tr><td><strong>Migrations</strong></td><td><code>golang-migrate</code> (embed via <code>//go:embed</code>)</td><td>Standard Go migration tool. Advisory lock <code>pg_advisory_lock</code> để tránh race multi-replica</td></tr>
+<tr><td><strong>JWT verify</strong></td><td><code>github.com/golang-jwt/jwt/v5</code> + <code>github.com/MicahParks/keyfunc/v3</code></td><td>Zitadel signing key rotation → keyfunc fetch JWKS + cache + auto-refresh (singleflight)</td></tr>
+<tr><td><strong>Structured logs</strong></td><td><code>log/slog</code> (Go stdlib)</td><td>Stdlib từ Go 1.21+, JSON handler → stdout → docker → OneLog rsyslog. Không thêm zap/logrus</td></tr>
+<tr><td><strong>Metrics</strong></td><td><code>prometheus/client_golang</code></td><td>Ecosystem chuẩn, <code>/metrics</code> endpoint. Grafana dashboard reuse OneLog</td></tr>
+<tr><td><strong>In-mem cache + dedup</strong></td><td><code>hashicorp/golang-lru/v2</code></td><td>LRU cache cho <code>/authz/me</code> payload + webhook event dedup (Phase 3). Không cần Redis (V2 decision)</td></tr>
+<tr><td><strong>Rate limit</strong></td><td><code>golang.org/x/time/rate</code></td><td>Token bucket per-user, in-mem map + LRU eviction</td></tr>
+<tr><td><strong>CLI framework</strong></td><td><code>spf13/cobra</code></td><td>Subcommands (<code>assign, revoke, bootstrap-admin, deny-now, break-glass rotate, audit tail</code>). Same binary với service</td></tr>
+<tr><td><strong>Config</strong></td><td>Env vars + <code>caarlos0/env/v11</code></td><td>KISS — không Viper. Struct tags map env → typed config</td></tr>
+<tr><td><strong>HMAC verify (webhook)</strong></td><td><code>crypto/hmac</code> + <code>crypto/subtle</code></td><td>Stdlib timing-safe compare</td></tr>
+<tr><td><strong>Random tokens</strong></td><td><code>crypto/rand</code></td><td>Break-glass token 256-bit</td></tr>
+</table>
+
+<h3>Database</h3>
+<table>
+<tr><th style="width:22%;">Component</th><th style="width:26%;">Choice</th><th>Lý do</th></tr>
+<tr><td><strong>DBMS</strong></td><td>PostgreSQL 15+</td><td>JSONB (scope, metadata), <code>timestamptz</code>, advisory lock, <code>ON CONFLICT</code>, mature backup tooling. Đồng bộ với Zitadel PG version</td></tr>
+<tr><td><strong>Container image</strong></td><td><code>postgres:15-alpine</code></td><td>Isolated container (F13 — không chung với Zitadel), own volume + backup</td></tr>
+<tr><td><strong>Backup</strong></td><td><code>pg_dump</code> nightly → S3 (existing OneLog backup pipeline)</td><td>Reuse pattern plan <code>260723-0946-backup-s3-onelog-vps</code></td></tr>
+<tr><td><strong>Cache layer</strong></td><td><span style="color:var(--danger);">❌ KHÔNG Redis</span></td><td>Validation V2 chốt — thay bằng in-process LRU + version poll HEAD 30s</td></tr>
+</table>
+
+<h3>SDK Go (<code>authway-sdk-go</code>)</h3>
+<table>
+<tr><th style="width:22%;">Component</th><th style="width:26%;">Choice</th><th>Lý do</th></tr>
+<tr><td><strong>HTTP client</strong></td><td><code>net/http</code> stdlib</td><td>Không thêm resty/go-resty — SDK cần lean, minimal deps</td></tr>
+<tr><td><strong>Cache</strong></td><td><code>hashicorp/golang-lru/v2</code></td><td>Cùng lib với service, TTL 60s, size 10k entries</td></tr>
+<tr><td><strong>Version polling</strong></td><td>Goroutine + <code>time.Ticker(30s)</code></td><td>HEAD <code>/authz/version/{user_id}</code>, batch cho multiple users nếu cần</td></tr>
+<tr><td><strong>Middleware adapters</strong></td><td>Fiber + net/http + Echo (chọn theo host app)</td><td>Consumer chọn theo framework OneLog đang dùng</td></tr>
+<tr><td><strong>Config</strong></td><td>Options pattern (functional options)</td><td>Idiomatic Go, kèm sane defaults</td></tr>
+</table>
+
+<h3>Frontend / UI</h3>
+<table>
+<tr><th style="width:22%;">Component</th><th style="width:26%;">Choice</th><th>Lý do</th></tr>
+<tr><td><strong>Admin CLI (Phase 4a)</strong></td><td>Go binary (same repo)</td><td>Ship cùng service, no extra tooling</td></tr>
+<tr><td><strong>Admin Web UI (Phase 4b — DEFER)</strong></td><td>Next.js 15 + shadcn/ui + Tailwind (nếu build)</td><td>Đồng bộ với OneLog frontend stack. Deferred until >5 admins</td></tr>
+</table>
+
+<h3>Infrastructure &amp; DevOps</h3>
+<table>
+<tr><th style="width:22%;">Component</th><th style="width:26%;">Choice</th><th>Lý do</th></tr>
+<tr><td><strong>Container runtime</strong></td><td>Docker + Docker Compose</td><td>Đồng bộ auth-vps stack hiện có (Zitadel, Traefik)</td></tr>
+<tr><td><strong>Base image</strong></td><td>Multi-stage: <code>golang:1.22-alpine</code> build → <code>gcr.io/distroless/static:nonroot</code> runtime</td><td>Attack surface tối thiểu, image final ~15-20MB, non-root user</td></tr>
+<tr><td><strong>Reverse proxy</strong></td><td>Traefik (existing auth-vps)</td><td>Route <code>rbac.auth.example.com/api/*</code>, TLS auto, IP allowlist middleware</td></tr>
+<tr><td><strong>Identity provider</strong></td><td>Zitadel v4.15+ (existing)</td><td>OIDC issuer, JWKS, LDAP federation</td></tr>
+<tr><td><strong>CI/CD</strong></td><td>GitHub Actions (existing OneLog pattern)</td><td>Build multi-stage, push registry, deploy via SSH + <code>docker compose up -d</code></td></tr>
+<tr><td><strong>Registry</strong></td><td>GitHub Container Registry (<code>ghcr.io</code>)</td><td>Free cho private, pattern OneLog đã dùng</td></tr>
+</table>
+
+<h3>Observability</h3>
+<table>
+<tr><th style="width:22%;">Component</th><th style="width:26%;">Choice</th><th>Lý do</th></tr>
+<tr><td><strong>Logs</strong></td><td>slog JSON → stdout → docker logs → rsyslog forwarder → VictoriaLogs</td><td>Reuse OneLog log pipeline. Audit events ship real-time (F10)</td></tr>
+<tr><td><strong>Metrics</strong></td><td>Prometheus scrape → VictoriaMetrics (OneLog)</td><td>Reuse OneLog vmagent, tag <code>service=authway-rbac</code></td></tr>
+<tr><td><strong>Dashboards</strong></td><td>Grafana (OneLog existing)</td><td>Panel: request rate, latency histogram, cache hit rate, JWT verify errors, break-glass usage</td></tr>
+<tr><td><strong>Alerts</strong></td><td>vmalert rules (OneLog pattern)</td><td>Alert: RBAC down, /authz/me error rate spike, break-glass used, sync drift threshold</td></tr>
+<tr><td><strong>Health probes</strong></td><td><code>/healthz</code> (live), <code>/readyz</code> (deps: PG ping, JWKS fetch)</td><td>Docker Compose healthcheck; Traefik service discovery</td></tr>
+</table>
+
+<h3>Testing</h3>
+<table>
+<tr><th style="width:22%;">Component</th><th style="width:26%;">Choice</th><th>Lý do</th></tr>
+<tr><td><strong>Unit tests</strong></td><td><code>testing</code> stdlib + <code>testify/require</code></td><td>Standard Go, không thêm framework</td></tr>
+<tr><td><strong>Integration tests</strong></td><td><code>testcontainers-go</code> (Postgres + Zitadel mock)</td><td>Spin up PG per test suite, verify migrations + queries</td></tr>
+<tr><td><strong>HTTP tests</strong></td><td><code>net/http/httptest</code></td><td>Test handlers end-to-end without real network</td></tr>
+<tr><td><strong>Load test</strong></td><td><code>wrk -c 20 -d 30s</code> (bash, không k6)</td><td>Realistic SLO validation, không over-invest</td></tr>
+</table>
+
+<h3>Security libs (defense in depth)</h3>
+<div class="grid2">
+  <div class="card sec">
+    <span class="tag sec">CRYPTO</span>
+    <ul style="font-size:13px;">
+      <li><code>crypto/hmac</code> — webhook signature verify</li>
+      <li><code>crypto/subtle</code> — timing-safe compare</li>
+      <li><code>crypto/rand</code> — token generation</li>
+      <li><code>crypto/sha256</code> — hash chain audit</li>
+    </ul>
+  </div>
+  <div class="card sec">
+    <span class="tag sec">JWT / OIDC</span>
+    <ul style="font-size:13px;">
+      <li><code>golang-jwt/jwt/v5</code> — parse + verify</li>
+      <li><code>MicahParks/keyfunc/v3</code> — JWKS cache + refresh + singleflight</li>
+      <li>Verify: <code>iss</code>, <code>aud</code>, <code>exp</code>, <code>nbf</code>, signature</li>
+    </ul>
+  </div>
+</div>
+
+<h3>Dependency policy</h3>
+<div class="card warn">
+  <ul>
+    <li><strong>Minimize direct deps</strong>: target &lt; 15 direct imports trong <code>go.mod</code></li>
+    <li><strong>Prefer stdlib</strong> khi có sẵn (slog, net/http, crypto/*, testing)</li>
+    <li><strong>Vendor</strong> committed nếu dep changes rapidly (hashicorp libs OK, không vendor)</li>
+    <li><strong>Audit</strong>: <code>govulncheck</code> mỗi CI run + Dependabot alerts</li>
+    <li><strong>No ORM</strong>: raw SQL trong repository, prepared statements pgx handle</li>
+    <li><strong>No config framework</strong>: env vars + typed struct, không Viper</li>
+    <li><strong>No logging framework</strong>: slog stdlib, không zap/logrus</li>
+  </ul>
+</div>
+
+<h3>Repo layout (mono, cùng authway repo)</h3>
+<div class="flow" style="font-size:12px; padding:14px;">authway/
+├── authway-rbac/                    ← service + CLI (same binary)
+│   ├── cmd/authway-rbac/main.go
+│   ├── internal/
+│   │   ├── config/                  env parsing
+│   │   ├── db/                      pgx pool + migrations embed
+│   │   ├── domain/                  types (Permission, Role, User, ...)
+│   │   ├── repository/              raw SQL queries
+│   │   ├── service/                 wildcard expand, effective perms
+│   │   ├── httpapi/                 Fiber handlers + middleware
+│   │   ├── cli/                     cobra subcommands
+│   │   ├── sync/                    Zitadel client + webhook + reconcile
+│   │   ├── audit/                   hash-chained writer
+│   │   └── cache/                   in-mem LRU wrappers
+│   ├── db/migrations/*.sql          ← Phase 1 DDL
+│   ├── db/seeds/onelog.sql          ← Phase 1 seed
+│   ├── Dockerfile                   multi-stage
+│   ├── docker-compose.rbac.yml      overlay for auth-vps
+│   └── go.mod
+│
+├── authway-sdk-go/                  ← consumed by OneLog + other apps
+│   ├── client.go
+│   ├── middleware/
+│   │   ├── fiber.go
+│   │   ├── nethttp.go
+│   │   └── echo.go
+│   ├── cache.go
+│   └── go.mod                       (separate module để version độc lập)
+│
+└── docs/
+    ├── rbac-permission-naming.md    ← Phase 1 RFC
+    ├── rbac-data-model.md
+    ├── rbac-cli-cheatsheet.md
+    └── rbac-runbook.md</div>
+
+<!-- ========== 10. ZITADEL ALONE ========== -->
+<h2 id="zitadel-alone">10. Zitadel alone — làm được gì (không cần RBAC)</h2>
+
+<div class="card ok">
+  <p><strong>Zitadel là IdP hoàn chỉnh, KHÔNG chỉ auth qua LDAP.</strong> Nó có sẵn nhiều primitive authorization dùng được ngay.</p>
+</div>
+
+<h3>Capabilities sẵn có</h3>
+<table>
+<tr><th>Capability</th><th>Chi tiết</th></tr>
+<tr><td><strong>Identity + Federation</strong></td><td>LDAP bind (đã setup), password, MFA (TOTP/Passkey/SMS), SSO</td></tr>
+<tr><td><strong>OIDC/OAuth2 issuer</strong></td><td>Access token, ID token, refresh token, JWKS, PKCE</td></tr>
+<tr><td><strong>Organizations</strong></td><td>Multi-org, org policy (password, MFA, login)</td></tr>
+<tr><td><strong>Projects (~= Apps)</strong></td><td>Mỗi app = 1 Project. Register OIDC client, define scopes</td></tr>
+<tr><td><strong>Zitadel Roles</strong></td><td>Per-Project: define <code>roles</code> (key + display_name + group). VD project <code>onelog</code> có roles <code>viewer</code>, <code>oncall</code>, <code>admin</code></td></tr>
+<tr><td><strong>Authorization Grants</strong></td><td>Assign User↔Role per Project. Embedded vào ID token dưới claim <code>urn:zitadel:iam:org:project:roles:*</code></td></tr>
+<tr><td><strong>Delegated admin</strong></td><td>Org owner, Project owner, User manager</td></tr>
+<tr><td><strong>Audit identity events</strong></td><td>Login, MFA, user CRUD, role grant/revoke (event-sourced)</td></tr>
+<tr><td><strong>Session management</strong></td><td>Session TTL, force logout, session listing</td></tr>
+<tr><td><strong>Actions V2</strong></td><td>Enrich token, call webhook (limited — Phase 0 verify)</td></tr>
+<tr><td><strong>Admin Console UI</strong></td><td>CRUD user/role/project/grant — technical UI</td></tr>
+<tr><td><strong>Password reset, self-service</strong></td><td>Có sẵn</td></tr>
+</table>
+
+<h3>Ví dụ: OneLog chỉ dùng Zitadel</h3>
+<div class="flow" style="font-size:12px; padding:14px;">Setup Zitadel:
+  Project = "onelog"
+  Roles (declared in project):
+    onelog-viewer, onelog-oncall, onelog-admin
+
+  User trihd@inet.vn assigned role "onelog-oncall" trong project onelog
+
+Login flow:
+  User login → Zitadel issue ID token với claim:
+    "urn:zitadel:iam:org:project:roles": {
+      "onelog-oncall": {"proj-id": "onelog"}
+    }
+
+App (OneLog):
+  Parse JWT → thấy role → if role == "onelog-oncall" then allow silence</div>
+
+<div class="card central">
+  <p><strong>Kết luận</strong>: Zitadel CÓ authorize được, nhưng ở <em>role level thô</em>, không có permission granular <code>&lt;svc&gt;.&lt;rsc&gt;.&lt;action&gt;</code>. Đủ dùng cho scale nhỏ 1-2 app; đau khi scale ra 5+ app hoặc cần fine-grained control.</p>
+</div>
+
+<!-- ========== 10. GAPS ========== -->
+<h2 id="gaps">11. Gaps nếu KHÔNG có Central RBAC</h2>
+
+<table>
+<tr><th style="width:5%;">#</th><th style="width:30%;">Gap</th><th style="width:35%;">Impact</th><th>Workaround với Zitadel raw</th></tr>
+<tr><td>1</td><td><strong>Không có permission model <code>&lt;svc&gt;.&lt;rsc&gt;.&lt;action&gt;</code></strong></td><td>App phải hardcode <code>if role == "oncall"</code> — mỗi app tự invent</td><td>Dùng role name làm proxy; OK cho vài permission/app</td></tr>
+<tr><td>2</td><td><strong>Không có Role → Permissions mapping</strong></td><td>Không thể express <code>oncall = viewer + alert.silence + alert.ack</code>. Role là flat name</td><td>Duplicate role definitions per app + doc convention</td></tr>
+<tr><td>3</td><td><strong>Không có Permission catalog cross-app</strong></td><td>Không có ngôn ngữ chung khi 5 app cùng chạy</td><td>Convention theo commit (role name naming)</td></tr>
+<tr><td>4</td><td><strong>Không có wildcard / scope</strong></td><td>Không thể <code>onelog.*</code> hoặc "admin cho org X only"</td><td>Zitadel scope trong ID token phần nào cover; org isolation qua Zitadel Org</td></tr>
+<tr><td>5</td><td><strong>Không có <code>deny_until</code> / emergency revoke</strong></td><td>Chỉ có "deactivate user" — mất session sau khi Zitadel session TTL. Cache oauth2-proxy còn giữ</td><td>Force user re-login qua Zitadel force-terminate session API</td></tr>
+<tr><td>6</td><td><strong>Không có break-glass token</strong></td><td>Zitadel down → không login được admin app</td><td>Zitadel super-admin instance-level; nhưng Zitadel down = mọi thứ down</td></tr>
+<tr><td>7</td><td><strong>Không có audit "role granted permission Y"</strong></td><td>Chỉ audit "role grant to user" — không audit khi permission catalog thay đổi</td><td>N/A (không có permission catalog)</td></tr>
+<tr><td>8</td><td><strong>Admin UI = Zitadel Console</strong></td><td>Admin phải học Zitadel model. Grant qua UI Zitadel technical, không tailor use case</td><td>Runbook + screenshot</td></tr>
+<tr><td>9</td><td><strong>Rate limit per user per app</strong></td><td>Zitadel có rate limit chung nhưng không per-permission-check</td><td>ứng dụng self-manage</td></tr>
+<tr><td>10</td><td><strong>Không có SDK convention</strong></td><td>Mỗi app tự parse claim <code>urn:zitadel:iam:...</code> — dễ sai schema</td><td>Doc + code snippet</td></tr>
+<tr><td>11</td><td><strong>Không có version-based cache invalidation</strong></td><td>Role change → chờ token expire (15min-1h) hoặc force session revoke</td><td>Cắt token TTL ngắn — trade-off UX</td></tr>
+<tr><td>12</td><td><strong>Không có hash-chain audit</strong></td><td>Zitadel audit event-sourced (mostly append-only) NHƯNG DBA có thể tamper</td><td>Chấp nhận Zitadel audit; ship SIEM</td></tr>
+<tr><td>13</td><td><strong>Không có Group→Role bulk assignment</strong></td><td>Zitadel v4 group support hạn chế — bulk khó</td><td>Assignment 1-by-1 hoặc script</td></tr>
+<tr><td>14</td><td><strong>Multi-tenant permission phức tạp</strong></td><td>Zitadel org isolation OK, nhưng "user X trong org A có quyền Z không" phải parse claim thủ công</td><td>N/A cho single-org hiện tại</td></tr>
+</table>
+
+<!-- ========== 11. COMPARISON ========== -->
+<h2 id="comparison">12. So sánh: Có Central RBAC vs Không</h2>
+
+<table class="compare">
+<tr>
+  <th>Aspect</th>
+  <th style="width:32%;">Zitadel ALONE (không RBAC)</th>
+  <th style="width:37%;">Zitadel + Central RBAC (Option B)</th>
+</tr>
+<tr><td><strong>Identity + SSO</strong></td><td class="have">✅ Có (LDAP federation)</td><td class="have">✅ Có (không đổi)</td></tr>
+<tr><td><strong>MFA enforcement</strong></td><td class="have">✅ Có</td><td class="have">✅ Có</td></tr>
+<tr><td><strong>Role assignment</strong></td><td class="partial">⚠️ Role thô per project</td><td class="have">✅ Role granular + wildcard</td></tr>
+<tr><td><strong>Permission model</strong></td><td class="miss">❌ Không có (chỉ role name)</td><td class="have">✅ <code>&lt;svc&gt;.&lt;rsc&gt;.&lt;action&gt;</code></td></tr>
+<tr><td><strong>Cross-app permission catalog</strong></td><td class="miss">❌ Không có</td><td class="have">✅ Central catalog</td></tr>
+<tr><td><strong>Emergency deny (deny_until)</strong></td><td class="miss">❌ Chỉ deactivate user</td><td class="have">✅ Immediate <code>deny-now</code></td></tr>
+<tr><td><strong>Break-glass Zitadel outage</strong></td><td class="miss">❌ Không có</td><td class="have">✅ Break-glass token</td></tr>
+<tr><td><strong>Version-based cache invalidation</strong></td><td class="miss">❌ Đợi token expire 15min-1h</td><td class="have">✅ Poll 30s, invalidate ≤ 30s</td></tr>
+<tr><td><strong>Admin UI</strong></td><td class="partial">⚠️ Zitadel Console (technical)</td><td class="partial">⚠️ CLI (Phase 4a) → Web UI defer</td></tr>
+<tr><td><strong>Audit permission catalog changes</strong></td><td class="miss">❌ Không có</td><td class="have">✅ Hash-chain audit + rsyslog ship</td></tr>
+<tr><td><strong>SDK convention (Go)</strong></td><td class="miss">❌ Mỗi app tự parse claim</td><td class="have">✅ authway-sdk-go middleware</td></tr>
+<tr><td><strong>Rate limit per user</strong></td><td class="miss">❌ Không có</td><td class="have">✅ Có</td></tr>
+<tr><td><strong>Group → Role bulk assignment</strong></td><td class="partial">⚠️ Zitadel v4 group hạn chế</td><td class="partial">⚠️ Gated by Phase 0 spike C</td></tr>
+<tr><td><strong>Multi-tenant scope</strong></td><td class="partial">⚠️ Zitadel Org isolation</td><td class="partial">⚠️ Schema-ready, chưa impl</td></tr>
+<tr><td><strong>Effort ban đầu</strong></td><td class="have">✅ 1-2 ngày (parse claim)</td><td class="partial">⚠️ 2-3 tuần</td></tr>
+<tr><td><strong>Maintenance overhead</strong></td><td class="have">✅ Không thêm gì</td><td class="partial">⚠️ 1 service + PG + backup</td></tr>
+<tr><td><strong>Blast radius khi Central RBAC down</strong></td><td class="have">✅ N/A</td><td class="partial">⚠️ SDK stale-while-error 5min buffer</td></tr>
+<tr><td><strong>Onboarding app mới</strong></td><td class="partial">⚠️ Register Zitadel Project + Roles + parse claim</td><td class="have">✅ SDK middleware + PR permission catalog</td></tr>
+<tr><td><strong>Scale ra 5+ app</strong></td><td class="partial">⚠️ Đau (mỗi app tự invent)</td><td class="have">✅ Ngôn ngữ chung</td></tr>
+</table>
+
+<div class="grid2">
+  <div class="card ok">
+    <span class="tag ok">CHỌN ZITADEL ALONE NẾU</span>
+    <ul>
+      <li>OneLog + max 1-2 app khác trong 12 tháng</li>
+      <li>Role thô đủ (viewer/oncall/admin)</li>
+      <li>Chấp nhận Admin qua Zitadel Console</li>
+      <li>Cache invalidation qua token TTL 15min OK</li>
+      <li>Không cần audit permission catalog changes</li>
+      <li>Không cần emergency deny nhanh</li>
+    </ul>
+    <p><strong>Effort</strong>: 1-2 ngày.</p>
+  </div>
+  <div class="card central">
+    <span class="tag">CHỌN CENTRAL RBAC NẾU</span>
+    <ul>
+      <li>Có ≥ 3 app committed adopt (F1 gate)</li>
+      <li>Cần permission <code>&lt;svc&gt;.&lt;rsc&gt;.&lt;action&gt;</code> để scale</li>
+      <li>Ops phòng KT không muốn học Zitadel Console</li>
+      <li>Cần <code>deny_until</code> emergency</li>
+      <li>Cần break-glass ngoài Zitadel</li>
+      <li>Cần centralized audit + hash chain</li>
+    </ul>
+    <p><strong>Effort</strong>: 2-3 tuần.</p>
+  </div>
+</div>
+
+<div class="card warn">
+  <span class="tag warn">HYBRID (Option C — chưa chốt)</span>
+  <p><strong>Zitadel + thin Go library + YAML in Git</strong>: Zitadel giữ role assignment, library <code>authway/pkg/rbac</code> map role name → permission list từ YAML, middleware <code>RequirePermission()</code>. Effort ~1 tuần. Không có <code>deny_until</code>, không có Web UI, permission phân tán per app.</p>
+  <p>Middle ground: có convention permission nhưng không có service riêng. Có thể upgrade lên Option B sau khi có 3+ app.</p>
+</div>
+
+<!-- ========== 12. TIMELINE ========== -->
+<h2 id="timeline">13. Phase timeline (Option B)</h2>
+
+<div class="timeline">
+  <div class="phase blocking">
+    <div class="n">P0</div>
+    <div><strong>Spikes</strong></div>
+    <div>1 day</div>
+    <div style="color:var(--danger); font-size:11px;">BLOCKING</div>
+  </div>
+  <div class="phase">
+    <div class="n">P1</div>
+    <div><strong>RFC + DDL</strong></div>
+    <div>2-3d</div>
+  </div>
+  <div class="phase">
+    <div class="n">P2</div>
+    <div><strong>RBAC backend</strong></div>
+    <div>5-7d</div>
+  </div>
+  <div class="phase">
+    <div class="n">P3</div>
+    <div><strong>User sync</strong></div>
+    <div>2-3d</div>
+  </div>
+  <div class="phase">
+    <div class="n">P4a</div>
+    <div><strong>Admin CLI</strong></div>
+    <div>1d</div>
+  </div>
+  <div class="phase">
+    <div class="n">P5</div>
+    <div><strong>SDK + OneLog</strong></div>
+    <div>3-4d</div>
+  </div>
+  <div class="phase deferred">
+    <div class="n">P6</div>
+    <div><strong>2nd app</strong></div>
+    <div>2d</div>
+    <div style="font-size:11px;">Gate: adopter</div>
+  </div>
+</div>
+
+<div class="card">
+  <p><strong>Total effort</strong>: 2-2.5 tuần. Phase 4b Web UI + SDK TS defer.</p>
+  <p><strong>External adopter deadline (V6)</strong>: 3 tháng sau OneLog dogfood xong (~2026-12). Miss deadline → scope review → downgrade sang YAML-in-Git.</p>
+</div>
+
+<!-- ========== 13. SCOPE ========== -->
+<h2 id="scope">14. Scope — có gì / không có gì</h2>
+
+<div class="grid2">
+  <div class="card ok">
+    <span class="tag ok">IN SCOPE (v1)</span>
+    <ul>
+      <li>Standalone Go service (Fiber + pgx)</li>
+      <li>Postgres (isolated container)</li>
+      <li>User sync từ Zitadel (webhook OR lazy)</li>
+      <li>SDK Go only</li>
+      <li>Admin CLI (7 subcommands)</li>
+      <li>Break-glass recovery flow</li>
+      <li>Hash-chain audit + rsyslog ship</li>
+      <li>Version-based cache invalidation (no Redis)</li>
+      <li>Single-org, schema-ready cho multi-org</li>
+      <li>OneLog dogfood: Grafana + VMAlert silence gates</li>
+    </ul>
+  </div>
+  <div class="card danger">
+    <span class="tag danger">OUT OF SCOPE / DEFERRED</span>
+    <ul>
+      <li>Redis pub-sub cache (bỏ V2)</li>
+      <li>SDK TypeScript (defer đến app TS thứ 2)</li>
+      <li>Next.js Admin Web UI (Phase 4b defer)</li>
+      <li>Multi-org first-class</li>
+      <li>Group sync (nếu spike C fail)</li>
+      <li>OpenFGA/SpiceDB ReBAC</li>
+      <li>Fine-grained resource ACL (per-app own it)</li>
+      <li>External adopter — gate 3m post-dogfood</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ========== 14. OPEN ========== -->
+<h2 id="open">15. Còn open (unresolved)</h2>
+
+<ol>
+  <li><strong>Zitadel v4 Actions V2 webhook</strong> — verify Phase 0 spike B</li>
+  <li><strong>Zitadel v4 group model</strong> — verify Phase 0 spike C</li>
+  <li><strong>Grafana OIDC integration</strong> — có sẵn hay cần bổ sung?</li>
+  <li><strong>alertmanager silence UI</strong> — có API auth pluggable không?</li>
+  <li><strong>External adopter Q4 2026</strong> — team nào commit?</li>
+  <li><strong>Direction lock-in</strong>: Option B đầy đủ vs Option C hybrid vs Zitadel alone?</li>
+</ol>
+
+<footer>
+  <p>Authway RBAC End-to-End Integration Overview — plan <code>260812-1150-authway-central-rbac</code></p>
+  <p>Related: <a href="Central Management Architecture - ZITADEL + RBAC.html">Central Management Architecture (target)</a> · Brainstorm <code>brainstorm-260812-1150-authway-central-rbac.md</code></p>
+</footer>
+
+  </main>
+</div>
+
+</body>
+</html>
