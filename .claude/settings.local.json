@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh -o ConnectTimeout=10 -o BatchMode=yes zimbra-mail \"hostname && whoami && uptime\")"
+    ]
+  }
+}
